@@ -1,8 +1,10 @@
 import data as scores
 from datetime import datetime
 import networkx as nx
+from python_tsp.heuristics import solve_tsp_lin_kernighan
+
 import numpy as np
-from python_tsp.heuristics import solve_tsp_lin_kernighan    
+from scipy.sparse import csr_matrix, lil_matrix
 
 def construct_graph(games):
     G = nx.DiGraph()
@@ -31,27 +33,38 @@ def construct_graph(games):
 
     return G
 
-def circle_of_suck(graph):
-    matrix = nx.adjacency_matrix(graph)
-    permutation, distance = solve_tsp_lin_kernighan(distance_matrix=matrix, verbose=True)
-    print('Permutation: ', permutation)
-    print('Distance: ', distance)
 
-    node_list = list(graph.nodes)
-    ordered_teams = [node_list[i] for i in permutation]
+# def atsp_to_stsp():
     
-    print("Ordered teams based on TSP solution:")
-    print(ordered_teams)
 
-    for i in range(len(ordered_teams) - 1):
-        winning_team = ordered_teams[i]
-        losing_team = ordered_teams[i + 1]
-        if graph.has_edge(winning_team, losing_team):
-            attrs = graph[winning_team][losing_team]
-        else:
-            attrs = graph[losing_team][winning_team]
-        
-        print(f"{winning_team} defeated {losing_team} on {attrs['date']} with a score of {attrs['winning_score']}-{attrs['losing_score']}")
+def circle_of_suck(graph):
+    sparse_asymmetric_tsp_matrix = nx.adjacency_matrix(graph)
+    # dense_symmetric_tsp_matrix = sparse_atsp_to_dense_stsp(sparse_asymmetric_tsp_matrix)
+    # np.set_printoptions(threshold=np.inf, linewidth=np.inf)
+    # print(dense_symmetric_tsp_matrix)
+
+    teams = {idx: team for idx, team in enumerate(list(graph.nodes()))}
+    print(teams)
+
+    permutation, distance = solve_tsp_lin_kernighan(distance_matrix=dense_symmetric_tsp_matrix, verbose=True)
+    print(permutation)
+    print(distance)
+
+    i = 0
+    for game in permutation:
+        winning_team = teams[permutation[i] % 30]
+        losing_team = teams[permutation[i + 1] % 30]
+        winning_score = graph[winning_team][losing_team]['winning_score']
+        losing_score = graph[winning_team][losing_team]['losing_score']
+        date = graph[winning_team][losing_team]['date']
+        print(i)
+        print(winning_team)
+        print(losing_team)
+        print(winning_score)
+        print(losing_score)
+        print(date)
+        i = i + 1
+
 
 def main():
     # get today's scores
