@@ -33,13 +33,28 @@ def construct_graph(games):
 
     return G
 
-
-# def atsp_to_stsp():
+def symmetricize_adjacency_matrix(m, high_int=None):
+    
+    """ Jonker-Volgenant method for transforming asymmetric TSP -> symmetric """
+    
+    # if high_int not provided, make it equal to 10 times the max value:
+    if high_int is None:
+        high_int = round(10*m.max())
+        
+    m_bar = m.copy()
+    np.fill_diagonal(m_bar, 0)
+    u = np.matrix(np.ones(m.shape) * high_int)
+    np.fill_diagonal(u, 0)
+    m_symm_top = np.concatenate((u, np.transpose(m_bar)), axis=1)
+    m_symm_bottom = np.concatenate((m_bar, u), axis=1)
+    m_symm = np.concatenate((m_symm_top, m_symm_bottom), axis=0)
+    
+    return m_symm
     
 
 def circle_of_suck(graph):
     sparse_asymmetric_tsp_matrix = nx.adjacency_matrix(graph)
-    # dense_symmetric_tsp_matrix = sparse_atsp_to_dense_stsp(sparse_asymmetric_tsp_matrix)
+    dense_symmetric_tsp_matrix = symmetricize_adjacency_matrix(sparse_asymmetric_tsp_matrix)
     # np.set_printoptions(threshold=np.inf, linewidth=np.inf)
     # print(dense_symmetric_tsp_matrix)
 
