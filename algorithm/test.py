@@ -48,11 +48,20 @@ def generate_random_directed_graph(num_nodes, num_edges):
 
     return graph
 
+def print_directed_graph(graph):
+    n = len(graph)
+    for i in range(n):
+        edges = []
+        for j in range(n):
+            if graph[i][j] == 1:
+                edges.append(j)
+        print(f"Vertex {i}: {edges}")
+
 # Example to generate a random graph with 30 nodes and 500 edges
 num_nodes = 30
 num_edges = 200
 graph = generate_random_directed_graph(num_nodes, num_edges)
-print(graph)
+print_directed_graph(graph)
 
 
 result = hamiltonian_cycle(graph)
