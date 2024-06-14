@@ -145,3 +145,13 @@ if __name__ == "__main__":
 
     circle_of_suck = suck(adjacency_matrix)
     print_circle_of_suck(circle_of_suck, team_names, edges)
+
+    api_url = "https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2024&startDate=2024-03-30&endDate=2024-06-12"
+    data = fetch_mlb_data(api_url)
+    game_results, team_names = parse_mlb_data(data)
+
+    adjacency_matrix, edges = construct_graph(game_results, team_names)
+    # print_parsed_data(adjacency_matrix, team_names, edges)
+
+    circle_of_suck = suck(adjacency_matrix)
+    print_circle_of_suck(circle_of_suck, team_names, edges)
