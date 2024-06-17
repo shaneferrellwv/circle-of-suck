@@ -94,4 +94,4 @@ def main():
     circle_of_suck(G)
 
 if __name__ == "__main__":
-    main();
+    main()

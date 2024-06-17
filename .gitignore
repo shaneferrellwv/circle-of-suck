@@ -1,2 +1,5 @@
 # virtual environment
 /venv
+algorithm/__pycache__
+bot/__pycache__
+__pycache__

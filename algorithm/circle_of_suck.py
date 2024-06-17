@@ -41,14 +41,14 @@ def print_parsed_games(games):
 
 def construct_graph(game_results, team_names):
     num_teams = len(team_names)
-    team_to_index = {team: i for i, team in enumerate(team_names)}
+    team_to_index = {team['id']: i for i, team in enumerate(team_names)}
     adj_matrix = [[0] * num_teams for _ in range(num_teams)]
     edges = {}
 
     for game in game_results:
         if game['home_score'] is not None and game['away_score'] is not None:
-            home_index = team_to_index[game['home_team']]
-            away_index = team_to_index[game['away_team']]
+            home_index = team_to_index[game['home_team_id']]
+            away_index = team_to_index[game['away_team_id']]
             
             if game['home_score'] > game['away_score']:
                 winner_index = home_index
@@ -77,7 +77,7 @@ def print_parsed_data(graph, team_names, edges):
                 print(f"  -> {team_names[j]} on {edge['date']} with score {edge['score']}")
         print()
 
-def suck(adj_matrix):
+def find_circle_of_suck(adj_matrix):
     memo = {}
     path = []
 
@@ -123,6 +123,11 @@ def suck(adj_matrix):
         return path
     else:
         return None
+    
+def suck(game_results, teams):
+    adjacency_matrix, edges = construct_graph(game_results, teams)
+    circle_of_suck = find_circle_of_suck(adjacency_matrix)
+    print_circle_of_suck(circle_of_suck, teams, edges)
 
 def print_circle_of_suck(cycle, team_names, edges):
     if cycle:
@@ -148,5 +153,5 @@ if __name__ == "__main__":
     # print_parsed_data(adjacency_matrix, team_names, edges)
 
     # algorithm time ^_^
-    circle_of_suck = suck(adjacency_matrix)
+    circle_of_suck = find_circle_of_suck(adjacency_matrix)
     print_circle_of_suck(circle_of_suck, team_names, edges)
