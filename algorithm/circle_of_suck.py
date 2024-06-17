@@ -1,43 +1,4 @@
-import requests
-
-def fetch_mlb_data(api_url):
-    response = requests.get(api_url)
-    response.raise_for_status()  # raise error for bad response
-    return response.json()
-
-def parse_mlb_data(data):
-    # extract game scores
-    game_results = []
-    for date_info in data['dates']:
-        date = date_info['date']
-        for game in date_info['games']:
-            if game['gameType'] == 'R':  # ignore non-regular season games
-                home_team = game['teams']['home']['team']['name']
-                away_team = game['teams']['away']['team']['name']
-                home_score = game['teams']['home'].get('score', 0)
-                away_score = game['teams']['away'].get('score', 0)
-                game_results.append({
-                    'date': date,
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'home_score': home_score,
-                    'away_score': away_score
-                })
-
-    # extract team names
-    team_names = set()
-    for game in game_results:
-        team_names.add(game['home_team'])
-        team_names.add(game['away_team'])
-
-    return game_results, list(team_names)
-
-def print_parsed_games(games):
-    for game in games:
-        print(f"Date: {game['date']}")
-        print(f"{game['away_team']} vs {game['home_team']}")
-        print(f"Score: {game['away_score']} - {game['home_score']}")
-        print()
+from datetime import datetime
 
 def construct_graph(game_results, team_names):
     num_teams = len(team_names)
@@ -67,17 +28,7 @@ def construct_graph(game_results, team_names):
 
     return adj_matrix, edges
 
-def print_parsed_data(graph, team_names, edges):
-    n = len(graph)
-    for i in range(n):
-        print(f"{team_names[i]}:")
-        for j in range(n):
-            if graph[i][j] == 1:
-                edge = edges[(i, j)]
-                print(f"  -> {team_names[j]} on {edge['date']} with score {edge['score']}")
-        print()
-
-def find_circle_of_suck(adj_matrix):
+def find_hamiltonian_cycle(adj_matrix):
     memo = {}
     path = []
 
@@ -124,34 +75,80 @@ def find_circle_of_suck(adj_matrix):
     else:
         return None
     
-def suck(game_results, teams):
-    adjacency_matrix, edges = construct_graph(game_results, teams)
-    circle_of_suck = find_circle_of_suck(adjacency_matrix)
-    print_circle_of_suck(circle_of_suck, teams, edges)
+def find_all_hamiltonian_paths(adj_matrix):
+    memo = {}
+    paths = []
+    path = []
 
-def print_circle_of_suck(cycle, team_names, edges):
+    def visit(node, visited):
+        # base case: if all nodes are visited
+        if visited == (1 << len(adj_matrix)) - 1:
+            paths.append(path.copy())
+            return
+
+        # get result if already cached
+        if (node, visited) in memo:
+            return
+
+        # explore possible next nodes
+        for next_node in range(len(adj_matrix)):
+            # if next_node is connected to node and not yet visited
+            if adj_matrix[node][next_node] == 1 and not (visited & (1 << next_node)):
+                path.append(next_node)
+                # recursive step: explore from next_node
+                visit(next_node, visited | (1 << next_node))
+                # backtrack
+                path.pop()
+
+        # cache that this node and visited state has been fully explored
+        memo[(node, visited)] = True
+
+    # start search from each node to find all paths
+    for start_node in range(len(adj_matrix)):
+        path.append(start_node)
+        visit(start_node, 1 << start_node)
+        path.pop()
+
+    return paths
+
+def find_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
+    if paths:
+        for path in paths:
+            ;
+
+def print_circle_of_suck(cycle, teams, edges):
     if cycle:
         print("Circle of Suck found:")
         for i in range(len(cycle) - 1):
             u = cycle[i]
             v = cycle[i + 1]
             edge = edges[(u, v)]
-            print(f"{team_names[u]} -> {team_names[v]} on {edge['date']} with score {edge['score']}")
+            print(f"{teams[u]['school']} -> {teams[v]['name']} on {convert_date(edge['date'])} with score {edge['score']}")
     else:
         print("Unable to find Circle of Suck")
 
-if __name__ == "__main__":
-    # selection
+def print_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
+    if paths:
+        for path in paths:
+            for i in range(len(path) - 1):
+                u = path[i]
+                v = path[i + 1]
+                edge = edges[(u, v)]
+                print(f"{teams[u]['school']} -> {teams[v]['name']} on {convert_date(edge['date'])} with score {edge['score']}")
+            print('\n')
+    else:
+        print("Unable to find any potential Circles of Suck")
 
-    # data retrieval
-    api_url = "https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2024&startDate=2024-03-30&endDate=2024-06-12"
-    data = fetch_mlb_data(api_url)
-    game_results, team_names = parse_mlb_data(data)
+def convert_date(date_str):
+    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S')
+    formatted_date = date_obj.strftime('%B %d, %Y')
+    return formatted_date
 
-    # construct graph
-    adjacency_matrix, edges = construct_graph(game_results, team_names)
-    # print_parsed_data(adjacency_matrix, team_names, edges)
-
-    # algorithm time ^_^
-    circle_of_suck = find_circle_of_suck(adjacency_matrix)
-    print_circle_of_suck(circle_of_suck, team_names, edges)
+def suck(game_results, teams):
+    adjacency_matrix, edges = construct_graph(game_results, teams)
+    # circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
+    # if circle_of_suck:
+    #     print_circle_of_suck(circle_of_suck, teams, edges)
+    # else:
+    potential_cirlces_of_suck = find_all_hamiltonian_paths(adjacency_matrix)
+    print_potential_circles_of_suck(potential_cirlces_of_suck, teams, edges)

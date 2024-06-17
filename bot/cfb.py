@@ -59,11 +59,13 @@ def fetch_teams(conference = None, division = None):
                 teams_list.append(team_info)
     return teams_list
 
-def parse_schedules(schedules = fetch_schedules(), current_week = fetch_current_week(), teams = fetch_teams()):
+def parse_schedules(schedules = fetch_schedules(), teams = fetch_teams()):
     valid_team_ids = {team['id'] for team in teams}
     game_results = []
+    upcoming_games = []
     for game in schedules:
-        game_finished = game['Status'] == 'Final' and game['Week'] <= current_week
+        game_finished = game['Status'] == 'Final'
+        game_scheduled = game['Status'] == 'Scheduled'
         conference_game = game['HomeTeamID'] in valid_team_ids and game['AwayTeamID'] in valid_team_ids
         if conference_game and game_finished:
             game_info = {
@@ -77,12 +79,22 @@ def parse_schedules(schedules = fetch_schedules(), current_week = fetch_current_
                 'away_score': game['AwayTeamScore']
             }
             game_results.append(game_info)
-    return game_results
+        elif conference_game and game_scheduled:
+            game_info = {
+                'title': game['Title'],
+                'date': game['Day'],
+                'home_team_id': game['HomeTeamID'],
+                'away_team_id': game['AwayTeamID'],
+                'home_team': game['HomeTeamName'],
+                'away_team': game['AwayTeamName'],
+            }
+            upcoming_games.append(game_info)
+    return game_results, upcoming_games
 
 if __name__ == "__main__":
     # selection
     # sport = 'cfb'
-    conference = 'Big 12'
+    conference = 'Atlantic Coast'
     division = None
 
     # retrieve data
@@ -93,7 +105,7 @@ if __name__ == "__main__":
     pretty_print(teams)
 
     # parse data
-    game_results = parse_schedules(schedules, current_week, teams)
+    game_results, upcoming_games = parse_schedules(schedules, teams)
 
     # find existing circle of suck
     suck(game_results, teams)
