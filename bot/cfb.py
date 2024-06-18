@@ -94,7 +94,7 @@ def parse_schedules(schedules = fetch_schedules(), teams = fetch_teams()):
 if __name__ == "__main__":
     # selection
     # sport = 'cfb'
-    conference = 'Atlantic Coast'
+    conference = 'Big 12'
     division = None
 
     # retrieve data

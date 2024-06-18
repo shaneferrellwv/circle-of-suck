@@ -1,53 +1,82 @@
 import requests
+import json
+from datetime import datetime
 
-BASE_URL = 'https://statsapi.mlb.com/api/v1'
+def pretty_print(data):
+    print(json.dumps(data, indent=4))
 
-def fetch_mlb_data(api_url):
+# ==================================================
+#                API functionality
+# ==================================================
+
+PAGE_SIZE = 1000
+
+PREFIX = 'replay'
+SPORT = 'football'
+LEAGUE = 'nfl'
+BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports'
+CORE_URL = 'https://sports.core.api.espn.com/v2/sports'
+BASE_API_URL = f'{BASE_URL}/{SPORT}/{LEAGUE}'
+CORE_API_URL = f'{CORE_URL}/{SPORT}/leagues/{LEAGUE}'
+
+def pure_api_call(api_url):
     response = requests.get(api_url)
-    response.raise_for_status()  # raise error for bad response
+    response.raise_for_status()
     return response.json()
 
-def parse_mlb_data(data):
-    # extract game scores
-    game_results = []
-    for date_info in data['dates']:
-        date = date_info['date']
-        for game in date_info['games']:
-            if game['gameType'] == 'R':  # ignore non-regular season games
-                home_team = game['teams']['home']['team']['name']
-                away_team = game['teams']['away']['team']['name']
-                home_score = game['teams']['home'].get('score', 0)
-                away_score = game['teams']['away'].get('score', 0)
-                game_results.append({
-                    'date': date,
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'home_score': home_score,
-                    'away_score': away_score
-                })
+def base_api_call(params):
+    params = '/'.join(params)
+    api_url = f'{BASE_API_URL}{params}'
+    response = requests.get(api_url)
+    response.raise_for_status()
+    return response.json()
 
-    # extract team names
-    team_names = set()
-    for game in game_results:
-        team_names.add(game['home_team'])
-        team_names.add(game['away_team'])
+def core_api_call(params):
+    params = '/'.join(params)
+    api_url = f'{CORE_API_URL}{params}'
+    response = requests.get(api_url)
+    response.raise_for_status()
+    return response.json()
 
-    return game_results, list(team_names)
+def convert_date(iso_date):
+    return datetime.strptime(iso_date, "%Y-%m-%dT%H:%MZ").strftime("%Y%m%d")
 
-def print_parsed_games(games):
-    for game in games:
-        print(f"Date: {game['date']}")
-        print(f"{game['away_team']} vs {game['home_team']}")
-        print(f"Score: {game['away_score']} - {game['home_score']}")
-        print()
+def fetch_season_dates(year):
+    response = core_api_call([f'/seasons/{year}'])
+    start_date = response['startDate']
+    end_date = response['endDate']
+    return convert_date(start_date), convert_date(end_date)
 
-def dates_by_season(league, season):
+def fetch_season_weeks(year):
+    weeks = []
+    response = core_api_call([f'/seasons/{year}/types/2/weeks'])
+    for week_url in response['items']:
+        weeks.append(pure_api_call(week_url['$ref']))
+    return weeks
+
+def fetch_week_events(week_events_url):
+    events = []
+    response = core_api_call(week_events_url)
+    for event in response['items']:
+        events.append(pure_api_call(event['$ref']))
+    return events
+
+def fetch_season_events(year):
+    events = []
+    weeks = fetch_season_weeks(year)
+    i = 0
+    for week in weeks:
+        events.append(fetch_week_events(week['events']['$ref']))
+    return events
+
+def fetch_teams(event):
+
     
 
-def fetch_season_data(league, division, season):
-    start_date, end_date = dates_by_season(league, season)
+def parse_season_scoreboards(response):
+    game_results = []
+    upcoming_games = []
+    return game_results, upcoming_games
 
-    api_url = f'{BASE_URL}/schedule?sportId=1&season={season}&startDate=2024-03-30&endDate={date}'
-    data = fetch_mlb_data(api_url)
-    game_results, team_names = parse_mlb_data(data)
-    return game_results, team_names
+if __name__ == "__main__":
+    pretty_print(fetch_season_scoreboards(2023))

@@ -111,10 +111,10 @@ def find_all_hamiltonian_paths(adj_matrix):
 
     return paths
 
-def find_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
-    if paths:
-        for path in paths:
-            ;
+# def find_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
+#     if paths:
+#         for path in paths:
+#             ;
 
 def print_circle_of_suck(cycle, teams, edges):
     if cycle:
@@ -134,7 +134,7 @@ def print_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
                 u = path[i]
                 v = path[i + 1]
                 edge = edges[(u, v)]
-                print(f"{teams[u]['school']} -> {teams[v]['name']} on {convert_date(edge['date'])} with score {edge['score']}")
+                print(f"{teams[u]['school']} -> {teams[v]['school']} on {convert_date(edge['date'])} with score {edge['score']}")
             print('\n')
     else:
         print("Unable to find any potential Circles of Suck")
@@ -146,9 +146,9 @@ def convert_date(date_str):
 
 def suck(game_results, teams):
     adjacency_matrix, edges = construct_graph(game_results, teams)
-    # circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
+    circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
     # if circle_of_suck:
-    #     print_circle_of_suck(circle_of_suck, teams, edges)
+    print_circle_of_suck(circle_of_suck, teams, edges)
     # else:
-    potential_cirlces_of_suck = find_all_hamiltonian_paths(adjacency_matrix)
-    print_potential_circles_of_suck(potential_cirlces_of_suck, teams, edges)
+    # potential_cirlces_of_suck = find_all_hamiltonian_paths(adjacency_matrix)
+    # print_potential_circles_of_suck(potential_cirlces_of_suck, teams, edges)
