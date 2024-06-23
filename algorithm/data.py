@@ -69,9 +69,14 @@ def fetch_season_events(year):
         events.append(fetch_week_events(week['events']['$ref']))
     return events
 
-def fetch_teams(event):
-
+def fetch_teams():
+    teams = []
+    repsonse = base_api_call(['/teams'])
+    for team in repsonse['sports'][0]['leagues'][0]['teams']:
+        teams.append(team['team']['displayName'])
+    return teams
     
+
 
 def parse_season_scoreboards(response):
     game_results = []
@@ -79,4 +84,5 @@ def parse_season_scoreboards(response):
     return game_results, upcoming_games
 
 if __name__ == "__main__":
-    pretty_print(fetch_season_scoreboards(2023))
+    # pretty_print()
+    print(fetch_teams())
