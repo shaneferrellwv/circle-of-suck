@@ -1,10 +1,14 @@
 import os
 import requests
 import json
-from datetime import datetime
+import pickle
 from anytree import NodeMixin, RenderTree, PreOrderIter
 from anytree.util import commonancestors
-import pickle
+from data import Tree, GroupNode, TeamNode, Game
+
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from algorithm.circle_of_suck import suck
 
 # ==================================================
 #                 utility functions
@@ -12,59 +16,6 @@ import pickle
 
 def pretty_print(data):
     print(json.dumps(data, indent=4))
-
-# ==================================================
-#              custom data structures
-# ==================================================
-
-class GroupNode(NodeMixin):
-    def __init__(self, name, abbreviation, parent=None):
-        self.name = name
-        self.abbreviation = abbreviation
-        self.parent = parent
-        self.games = set()
-
-    def __str__(self):
-        return f"{self.name} ({self.abbreviation})"
-
-    def __repr__(self):
-        return self.__str__()
-
-class TeamNode(NodeMixin):
-    def __init__(self, id, name, abbreviation, logo=None, parent=None):
-        self.id = id
-        self.name = name
-        self.abbreviation = abbreviation
-        self.logo = logo
-        self.parent = parent
-
-    def __str__(self):
-        return f"{self.name} ({self.abbreviation})"
-
-    def __repr__(self):
-        return self.__str__()
-
-class Game(NodeMixin):
-    def __init__(self, id, date, home_team, away_team, home_score, away_score):
-        self.id = id
-        self.date = date
-        self.home_team = home_team
-        self.away_team = away_team
-        self.home_score = home_score
-        self.away_score = away_score
-
-    def __str__(self):
-        return f"{self.date} {self.home_team.abbreviation} vs {self.away_team.abbreviation}: {self.home_score}-{self.away_score}"
-
-    def __repr__(self):
-        return self.__str__()
-    
-class Tree:
-    def __init__(self, root, groups, teams, game_ids):
-        self.root = root
-        self.groups = groups
-        self.teams = teams
-        self.game_ids = game_ids
 
 # ==================================================
 #                API functionality
@@ -168,18 +119,28 @@ def decorate_tree(root, groups_dict, teams_dict, season_year):
 
 def fetch_tree(season_year, season_type = 2):
     tree_path = f'data/{LEAGUE}/{season_year}/tree.pkl'
+
+    # if tree has already been constructed for this season
     if os.path.exists(tree_path):
         with open(tree_path, 'rb') as file:
             tree = pickle.load(file)
             teams_dict = pickle.load(file)
             groups_dict = pickle.load(file)
             finished_game_ids = pickle.load(file)
+
+    # if tree has not been constructed for this season
     else:
+        # create root node of tree
         root = GroupNode('National Football League', 'NFL', None)
+
+        # construct the skeleton of the tree (conferences & teams)
         root_response = core_api_call([f'/seasons/{season_year}/types/{season_type}'])
         tree, teams_dict, groups_dict = construct_tree(root, root_response)
+
+        # decorate the tree skeleton with game results
         tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict, season_year)
         
+        # print the tree (debug purposes)
         print('Tree:')
         for pre, fill, node in RenderTree(tree):
             print("%s%s" % (pre, node))
@@ -196,6 +157,7 @@ def fetch_tree(season_year, season_type = 2):
                 for item in node.games:
                     print(item)
 
+        # save the tree
         with open(tree_path, 'wb') as file:
             pickle.dump(tree, file)
             pickle.dump(teams_dict, file)
@@ -203,11 +165,26 @@ def fetch_tree(season_year, season_type = 2):
             pickle.dump(finished_game_ids, file)
     return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
+def pickle_circles_of_suck(tree, season_year):
+    for name, group_node in tree.groups.items():
+        # if circle of suck does not yet exist for this group
+        group_path = group_node.abbreviation if group_node.abbreviation is not None else group_node.name
+        group_path = group_path.replace(' ', '_').lower()
+        suck_path = f'data/{LEAGUE}/{season_year}/suck/{group_path}.pkl'
+        if not os.path.exists(suck_path):
+            # find if circle of suck exists for this subtree
+            circle_of_suck = suck(group_node)
+
+            # if circle of suck exists
+            if circle_of_suck is not None:
+                # pickle circle of suck
+
+            # else if no circle of suck exists
+                # if potential circles of suck exist
+                    # pickle potential circles of suck
+    return
+
 if __name__ == "__main__":
     season_year = 2023
     nfl_tree = fetch_tree(season_year)
-    for group in nfl_tree.groups:
-        games = set()
-        for node in PreOrderIter(group):
-            
-    
+    pickle_circles_of_suck(nfl_tree, season_year)

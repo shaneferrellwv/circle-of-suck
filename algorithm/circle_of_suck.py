@@ -1,6 +1,8 @@
+from anytree import PreOrderIter
+from bot.data import GroupNode, TeamNode, Game
 from datetime import datetime
 
-def construct_graph(game_results, team_names):
+def construct_graph_old(game_results, team_names):
     num_teams = len(team_names)
     team_to_index = {team['id']: i for i, team in enumerate(team_names)}
     adj_matrix = [[0] * num_teams for _ in range(num_teams)]
@@ -116,17 +118,6 @@ def find_all_hamiltonian_paths(adj_matrix):
 #         for path in paths:
 #             ;
 
-def print_circle_of_suck(cycle, teams, edges):
-    if cycle:
-        print("Circle of Suck found:")
-        for i in range(len(cycle) - 1):
-            u = cycle[i]
-            v = cycle[i + 1]
-            edge = edges[(u, v)]
-            print(f"{teams[u]['school']} -> {teams[v]['name']} on {convert_date(edge['date'])} with score {edge['score']}")
-    else:
-        print("Unable to find Circle of Suck")
-
 def print_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
     if paths:
         for path in paths:
@@ -140,11 +131,11 @@ def print_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
         print("Unable to find any potential Circles of Suck")
 
 def convert_date(date_str):
-    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S')
-    formatted_date = date_obj.strftime('%B %d, %Y')
+    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%MZ')
+    formatted_date = date_obj.strftime('%b %d, %Y').replace(" 0", " ")
     return formatted_date
 
-def suck(game_results, teams):
+def suck_old(game_results, teams):
     adjacency_matrix, edges = construct_graph(game_results, teams)
     circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
     # if circle_of_suck:
@@ -152,3 +143,65 @@ def suck(game_results, teams):
     # else:
     # potential_cirlces_of_suck = find_all_hamiltonian_paths(adjacency_matrix)
     # print_potential_circles_of_suck(potential_cirlces_of_suck, teams, edges)
+
+def extract_games(root):
+    games = []
+    teams = []
+    for node in PreOrderIter(root):
+        if len(node.children) == 0:
+            teams.append(node)
+        else:
+            for game in node.games:
+                games.append(game)
+    return games, teams
+
+def construct_graph(games, teams):
+    num_teams = len(teams)
+    team_to_index = {team.name: i for i, team in enumerate(teams)}
+    adj_matrix = [[0] * num_teams for _ in range(num_teams)]
+    edges = {}
+
+    for game in games:
+        home_index = team_to_index[game.home_team.name]
+        away_index = team_to_index[game.away_team.name]
+        
+        if game.home_score > game.away_score:
+            winner_index = home_index
+            loser_index = away_index
+        else:
+            winner_index = away_index
+            loser_index = home_index
+        
+        adj_matrix[winner_index][loser_index] = 1
+        edges[(winner_index, loser_index)] = game
+
+    return adj_matrix, edges
+
+def print_circle_of_suck(cycle, edges, teams, group_name):
+    print(group_name)
+    if cycle:
+        print("Circle of Suck found:")
+        index_to_team = {i: team for i, team in enumerate(teams)}
+        for i in range(len(cycle) - 1):
+            u = cycle[i]
+            v = cycle[i + 1]
+            game = edges[(u, v)]
+            if game.home_score > game.away_score:
+                winner_score = game.home_score
+                loser_score = game.away_score
+            else:
+                winner_score = game.away_score
+                loser_score = game.home_score
+            print(f"{index_to_team[u].name} -> {index_to_team[v].name} on {convert_date(game.date)} with score {winner_score}-{loser_score}")
+    else:
+        print("Unable to find Circle of Suck")
+    print()
+
+def suck(root):
+    games, teams = extract_games(root)
+    adjacency_matrix, edges = construct_graph(games, teams)
+    
+    circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
+    group_name = root.name
+    print_circle_of_suck(circle_of_suck, edges, teams, group_name)
+    return CircleOfSuck(group_name, circle_of_suck, edges)
