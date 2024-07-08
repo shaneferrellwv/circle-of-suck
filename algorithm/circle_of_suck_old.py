@@ -1,4 +1,4 @@
-import data as scores
+import bot.data as scores
 from datetime import datetime
 import networkx as nx
 from python_tsp.heuristics import solve_tsp_lin_kernighan

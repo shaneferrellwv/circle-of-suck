@@ -1,0 +1,5 @@
+My first challenge was learning python. I've used python previously but I don't consider myself very proficient in python. Quick start guides were too shallow, textbooks were too long, but ChatGPT is the perfect learning tool. I picked up on python syntax and quirks very quickly and I've really liked using it.
+
+My next challenge was determining the algorithm. I read literature for algorithmic solutions to the Hamiltonian cycle problem, but I soon discovered that this is a very neat and specific case. This algorithm is not interested in optimization, only being able to find a Hamiltonian cycle if any exist. I researched using TSP solvers for this impelemtentaion, but my own exponential solution was feasible for 30-40 teams. 
+
+Sourcing data was a giant hurdle. MLB has a terrific public API, but the same does not exist for other leagues. 
