@@ -1,5 +1,5 @@
 from anytree import PreOrderIter
-from bot.data import GroupNode, TeamNode, Game
+from bot.data import CircleOfSuck, GroupNode, TeamNode, Game
 from datetime import datetime
 
 def construct_graph_old(game_results, team_names):
@@ -30,7 +30,33 @@ def construct_graph_old(game_results, team_names):
 
     return adj_matrix, edges
 
+# check for any winless or undefeated teams
+def hamiltonian_sufficiency_check(matrix):
+    def has_win_and_loss(arr):
+        has_one = False
+        has_zero = False
+        for value in arr:
+            if value == 1:
+                has_one = True
+            elif value == 0:
+                has_zero = True
+            if has_one and has_zero:
+                return True
+        return False
+
+    for row in matrix:
+        if not has_win_and_loss(row):
+            return False
+    for col in range(len(matrix[0])):
+        column = [matrix[row][col] for row in range(len(matrix))]
+        if not has_win_and_loss(column):
+            return False
+    return True
+
 def find_hamiltonian_cycle(adj_matrix):
+    if hamiltonian_sufficiency_check(adj_matrix) is False:
+        return None
+
     memo = {}
     path = []
 
@@ -178,7 +204,6 @@ def construct_graph(games, teams):
     return adj_matrix, edges
 
 def print_circle_of_suck(cycle, edges, teams, group_name):
-    print(group_name)
     if cycle:
         print("Circle of Suck found:")
         index_to_team = {i: team for i, team in enumerate(teams)}
@@ -200,8 +225,12 @@ def print_circle_of_suck(cycle, edges, teams, group_name):
 def suck(root):
     games, teams = extract_games(root)
     adjacency_matrix, edges = construct_graph(games, teams)
-    
     circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
-    group_name = root.name
-    print_circle_of_suck(circle_of_suck, edges, teams, group_name)
-    return CircleOfSuck(group_name, circle_of_suck, edges)
+
+    print(root.name)
+    if circle_of_suck:
+        group_name = root.name
+        print_circle_of_suck(circle_of_suck, edges, teams, group_name)
+        circle_of_suck =  CircleOfSuck(group_name, circle_of_suck, edges)
+    
+    return circle_of_suck

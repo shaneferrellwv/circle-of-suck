@@ -55,10 +55,6 @@ class Tree:
 
 class CircleOfSuck:
     def __init__(self, group_name, cycle, results):
-        self.valid = True
         self.group_name = group_name
         self.cycle = cycle
         self.results = results
-        
-    def __init__(self, valid = False):
-        self.valid = valid

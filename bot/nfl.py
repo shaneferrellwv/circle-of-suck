@@ -118,6 +118,12 @@ def decorate_tree(root, groups_dict, teams_dict, season_year):
 # ==================================================
 
 def fetch_tree(season_year, season_type = 2):
+    # create data subdirectories if they don't already exist
+    directory_path = f'data/{LEAGUE}/{season_year}'
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+        os.makedirs(directory_path + '/suck')
+
     tree_path = f'data/{LEAGUE}/{season_year}/tree.pkl'
 
     # if tree has already been constructed for this season
@@ -168,7 +174,7 @@ def fetch_tree(season_year, season_type = 2):
 def pickle_circles_of_suck(tree, season_year):
     for name, group_node in tree.groups.items():
         # if circle of suck does not yet exist for this group
-        group_path = group_node.abbreviation if group_node.abbreviation is not None else group_node.name
+        group_path = group_node.name
         group_path = group_path.replace(' ', '_').lower()
         suck_path = f'data/{LEAGUE}/{season_year}/suck/{group_path}.pkl'
         if not os.path.exists(suck_path):
@@ -178,13 +184,16 @@ def pickle_circles_of_suck(tree, season_year):
             # if circle of suck exists
             if circle_of_suck is not None:
                 # pickle circle of suck
+                with open(suck_path, 'wb') as file:
+                    pickle.dump(circle_of_suck, file)
 
+            # TODO
             # else if no circle of suck exists
                 # if potential circles of suck exist
                     # pickle potential circles of suck
     return
 
 if __name__ == "__main__":
-    season_year = 2023
-    nfl_tree = fetch_tree(season_year)
-    pickle_circles_of_suck(nfl_tree, season_year)
+    for season_year in range(2010, 2023):
+        nfl_tree = fetch_tree(season_year)
+        pickle_circles_of_suck(nfl_tree, season_year)
