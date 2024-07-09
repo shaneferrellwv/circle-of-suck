@@ -1,34 +1,5 @@
 from anytree import PreOrderIter
-from bot.data import CircleOfSuck, GroupNode, TeamNode, Game
-from datetime import datetime
-
-def construct_graph_old(game_results, team_names):
-    num_teams = len(team_names)
-    team_to_index = {team['id']: i for i, team in enumerate(team_names)}
-    adj_matrix = [[0] * num_teams for _ in range(num_teams)]
-    edges = {}
-
-    for game in game_results:
-        if game['home_score'] is not None and game['away_score'] is not None:
-            home_index = team_to_index[game['home_team_id']]
-            away_index = team_to_index[game['away_team_id']]
-            
-            if game['home_score'] > game['away_score']:
-                winner_index = home_index
-                loser_index = away_index
-                score = (game['home_score'], game['away_score'])
-            else:
-                winner_index = away_index
-                loser_index = home_index
-                score = (game['away_score'], game['home_score'])
-            
-            adj_matrix[winner_index][loser_index] = 1
-            edges[(winner_index, loser_index)] = {
-                'date': game['date'],
-                'score': score
-            }
-
-    return adj_matrix, edges
+from algorithm.data import CircleOfSuck, GroupNode, TeamNode, Game
 
 # check for any winless or undefeated teams
 def hamiltonian_sufficiency_check(matrix):
@@ -103,6 +74,7 @@ def find_hamiltonian_cycle(adj_matrix):
     else:
         return None
     
+# TODO: to be used in the future for mid-season updates
 def find_all_hamiltonian_paths(adj_matrix):
     memo = {}
     paths = []
@@ -139,37 +111,6 @@ def find_all_hamiltonian_paths(adj_matrix):
 
     return paths
 
-# def find_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
-#     if paths:
-#         for path in paths:
-#             ;
-
-def print_potential_circles_of_suck(paths, teams, edges, upcoming_games = None):
-    if paths:
-        for path in paths:
-            for i in range(len(path) - 1):
-                u = path[i]
-                v = path[i + 1]
-                edge = edges[(u, v)]
-                print(f"{teams[u]['school']} -> {teams[v]['school']} on {convert_date(edge['date'])} with score {edge['score']}")
-            print('\n')
-    else:
-        print("Unable to find any potential Circles of Suck")
-
-def convert_date(date_str):
-    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%MZ')
-    formatted_date = date_obj.strftime('%b %d, %Y').replace(" 0", " ")
-    return formatted_date
-
-def suck_old(game_results, teams):
-    adjacency_matrix, edges = construct_graph(game_results, teams)
-    circle_of_suck = find_hamiltonian_cycle(adjacency_matrix)
-    # if circle_of_suck:
-    print_circle_of_suck(circle_of_suck, teams, edges)
-    # else:
-    # potential_cirlces_of_suck = find_all_hamiltonian_paths(adjacency_matrix)
-    # print_potential_circles_of_suck(potential_cirlces_of_suck, teams, edges)
-
 def extract_games(root):
     games = []
     teams = []
@@ -182,8 +123,11 @@ def extract_games(root):
     return games, teams
 
 def construct_graph(games, teams):
-    num_teams = len(teams)
+    # create mapping to keep track of which team corresponds to each index
     team_to_index = {team.name: i for i, team in enumerate(teams)}
+
+    # initialize zero-filled 2D array and set of edges
+    num_teams = len(teams)
     adj_matrix = [[0] * num_teams for _ in range(num_teams)]
     edges = {}
 
@@ -203,25 +147,8 @@ def construct_graph(games, teams):
 
     return adj_matrix, edges
 
-def print_circle_of_suck(cycle, edges, teams, group_name):
-    if cycle:
-        print("Circle of Suck found:")
-        index_to_team = {i: team for i, team in enumerate(teams)}
-        for i in range(len(cycle) - 1):
-            u = cycle[i]
-            v = cycle[i + 1]
-            game = edges[(u, v)]
-            if game.home_score > game.away_score:
-                winner_score = game.home_score
-                loser_score = game.away_score
-            else:
-                winner_score = game.away_score
-                loser_score = game.home_score
-            print(f"{index_to_team[u].name} -> {index_to_team[v].name} on {convert_date(game.date)} with score {winner_score}-{loser_score}")
-    else:
-        print("Unable to find Circle of Suck")
-    print()
-
+# function to find circle of suck from a league hierarchy tree decorated with games
+# returns CircleOfSuck if circle of suck is found, returns None if no circle of suck found
 def suck(root):
     games, teams = extract_games(root)
     adjacency_matrix, edges = construct_graph(games, teams)
@@ -230,7 +157,9 @@ def suck(root):
     print(root.name)
     if circle_of_suck:
         group_name = root.name
-        print_circle_of_suck(circle_of_suck, edges, teams, group_name)
-        circle_of_suck =  CircleOfSuck(group_name, circle_of_suck, edges)
+        circle_of_suck =  CircleOfSuck(group_name, circle_of_suck, edges, teams)
+        print(circle_of_suck)
+    else:
+        print("Unable to find Circle of Suck\n")
     
     return circle_of_suck

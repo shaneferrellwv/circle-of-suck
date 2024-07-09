@@ -2,7 +2,7 @@
 /venv
 algorithm/__pycache__
 bot/__pycache__
-__pycache__
+__pycache__/
 
 # data
 data
