@@ -1,7 +1,6 @@
 import os
 import requests
 import json
-import pickle
 from anytree import NodeMixin, RenderTree, PreOrderIter
 from anytree.util import commonancestors
 
@@ -17,7 +16,7 @@ from algorithm.circle_of_suck import suck
 def pretty_print(data):
     print(json.dumps(data, indent=4))
 
-def bot(SEASON_YEAR, SPORT, LEAGUE, LEAGUE_NAME, LEAGUE_ABBREVIATION, OPTIONAL_GROUP_PATH = None):
+def bot(SEASON_YEAR, SPORT, LEAGUE):
 
     # ==================================================
     #                    API calls
@@ -53,15 +52,14 @@ def bot(SEASON_YEAR, SPORT, LEAGUE, LEAGUE_NAME, LEAGUE_ABBREVIATION, OPTIONAL_G
     # ==================================================
 
     # recursive function to collect league hierarchy
-    def construct_tree(root, root_response, teams_dict = {}, groups_dict = {}):
-        groups_dict[root.name] = root
+    def construct_tree(root, root_response, groups_dict, teams_dict = {}):
         if 'groups' in root_response:
             groups_response = pure_api_call(root_response['groups']['$ref'])
             for item in groups_response['items']:
                 item_response = pure_api_call(item['$ref'])
                 group_node = GroupNode(item_response['name'], item_response['abbreviation'] if 'abbreviation' in item_response else None, root)
                 groups_dict[group_node.name] = group_node
-                construct_tree(group_node, item_response, teams_dict, groups_dict)
+                construct_tree(group_node, item_response, groups_dict, teams_dict)
         elif 'children' in root_response:
             print("Scraping", root_response['name'] + '...')
             children_response = pure_api_call(root_response['children']['$ref'])
@@ -69,7 +67,7 @@ def bot(SEASON_YEAR, SPORT, LEAGUE, LEAGUE_NAME, LEAGUE_ABBREVIATION, OPTIONAL_G
                 item_response = pure_api_call(item['$ref'])
                 group_node = GroupNode(item_response['name'], item_response['abbreviation'] if 'abbreviation' in item_response else None, root)
                 groups_dict[group_node.name] = group_node
-                construct_tree(group_node, item_response, teams_dict, groups_dict)
+                construct_tree(group_node, item_response, groups_dict, teams_dict)
         else:
             print("Scraping", root_response['name'] + '...')
             teams_list = pure_api_call(root_response['teams']['$ref'])
@@ -138,24 +136,30 @@ def bot(SEASON_YEAR, SPORT, LEAGUE, LEAGUE_NAME, LEAGUE_ABBREVIATION, OPTIONAL_G
             os.makedirs(directory_path)
             os.makedirs(directory_path + '/suck')
 
-        tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.pkl'
+        tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.json'
 
         # if tree has already been constructed for this season
         if os.path.exists(tree_path):
-            with open(tree_path, 'rb') as file:
-                tree = pickle.load(file)
-                teams_dict = pickle.load(file)
-                groups_dict = pickle.load(file)
-                finished_game_ids = pickle.load(file)
+            with open(tree_path, 'r') as file:
+                data = json.load(file)
+            tree = data[0]
+            teams_dict = data[1]
+            groups_dict = data[2]
+            finished_game_ids = data[3]
 
         # if tree has not been constructed for this season
         else:
             # create root node of tree
-            root = GroupNode(LEAGUE_NAME, LEAGUE_ABBREVIATION, None)
+            league_response = core_api_call('')
+            league_name = league_response['name']
+            league_abbreviation = league_response['abbreviation']
+            root = GroupNode(league_name, league_abbreviation, None)
+            groups_dict = {}
+            groups_dict[root.name] = root
 
             # construct the skeleton of the tree (conferences & teams)
             root_response = core_api_call([f'/seasons/{SEASON_YEAR}/types/{season_type}'])
-            tree, teams_dict, groups_dict = construct_tree(root, root_response)
+            tree, teams_dict, groups_dict = construct_tree(root, root_response, groups_dict)
 
             # decorate the tree skeleton with game results
             tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict, SEASON_YEAR)
@@ -178,40 +182,44 @@ def bot(SEASON_YEAR, SPORT, LEAGUE, LEAGUE_NAME, LEAGUE_ABBREVIATION, OPTIONAL_G
                         print(item)
 
             # save the tree
-            with open(tree_path, 'wb') as file:
-                pickle.dump(tree, file)
-                pickle.dump(teams_dict, file)
-                pickle.dump(groups_dict, file)
-                pickle.dump(finished_game_ids, file)
+            data = [
+                tree,
+                teams_dict,
+                groups_dict,
+                finished_game_ids
+            ]
+            with open(tree_path, 'w') as file:
+                json.dump(data, file)
         return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
-    def pickle_circles_of_suck(tree, SEASON_YEAR):
+    def save_circles_of_suck(tree, SEASON_YEAR):
         for name, group_node in tree.groups.items():
             # if circle of suck does not yet exist for this group
             group_path = group_node.name
             group_path = group_path.replace(' ', '_').lower()
-            suck_path = f'data/{LEAGUE}/{SEASON_YEAR}/suck/{group_path}.pkl'
+            suck_path = f'data/{LEAGUE}/{SEASON_YEAR}/suck/{group_path}.json'
             if not os.path.exists(suck_path):
                 # find if circle of suck exists for this subtree
                 circle_of_suck = suck(group_node)
 
                 # if circle of suck exists
                 if circle_of_suck is not None:
-                    # pickle circle of suck
-                    with open(suck_path, 'wb') as file:
-                        pickle.dump(circle_of_suck, file)
+                    # save circle of suck
+                    with open(suck_path, 'w') as file:
+                        json.dump(circle_of_suck, file)
 
                 # TODO
                 # else if no circle of suck exists
                     # if potential circles of suck exist
-                        # pickle potential circles of suck
+                        # save potential circles of suck
         return
 
     tree = fetch_tree(SEASON_YEAR)
-    pickle_circles_of_suck(tree, SEASON_YEAR)
+    save_circles_of_suck(tree, SEASON_YEAR)
 
 if __name__ == "__main__":
     sport = 'football'
     league = 'nfl'
-    for season_year in range(2010, 2024):
-        bot(season_year, sport, league, 'National Football League', 'NFL')
+    season_year = 2023
+    
+    bot(season_year, sport, league)
