@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import pickle
 from anytree import NodeMixin, RenderTree, PreOrderIter
 from anytree.util import commonancestors
 
@@ -16,7 +17,7 @@ from algorithm.circle_of_suck import suck
 def pretty_print(data):
     print(json.dumps(data, indent=4))
 
-def bot(SEASON_YEAR, SPORT, LEAGUE):
+def bot(SPORT, LEAGUE, SEASON_YEAR):
 
     # ==================================================
     #                    API calls
@@ -116,6 +117,7 @@ def bot(SEASON_YEAR, SPORT, LEAGUE):
                     game_info = Game(
                         event['id'],
                         event['date'],
+                        event['week']['text'],
                         teams_dict[home_id],
                         teams_dict[away_id],
                         int(event['competitions'][0]['competitors'][0]['score']['value']),
@@ -136,16 +138,15 @@ def bot(SEASON_YEAR, SPORT, LEAGUE):
             os.makedirs(directory_path)
             os.makedirs(directory_path + '/suck')
 
-        tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.json'
+        tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.pkl'
 
         # if tree has already been constructed for this season
         if os.path.exists(tree_path):
-            with open(tree_path, 'r') as file:
-                data = json.load(file)
-            tree = data[0]
-            teams_dict = data[1]
-            groups_dict = data[2]
-            finished_game_ids = data[3]
+            with open(tree_path, 'rb') as file:
+                tree = pickle.load(file)
+                teams_dict = pickle.load(file)
+                groups_dict = pickle.load(file)
+                finished_game_ids = pickle.load(file)
 
         # if tree has not been constructed for this season
         else:
@@ -182,17 +183,21 @@ def bot(SEASON_YEAR, SPORT, LEAGUE):
                         print(item)
 
             # save the tree
-            data = [
-                tree,
-                teams_dict,
-                groups_dict,
-                finished_game_ids
-            ]
-            with open(tree_path, 'w') as file:
-                json.dump(data, file)
+            with open(tree_path, 'wb') as file:
+                pickle.dump(tree, file)
+                pickle.dump(teams_dict, file)
+                pickle.dump(groups_dict, file)
+                pickle.dump(finished_game_ids, file)
         return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
     def save_circles_of_suck(tree, SEASON_YEAR):
+
+        # encoder to write Circle of Suck, Team Nodes, and Game Nodes to JSON
+        def custom_encoder(obj):
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
         for name, group_node in tree.groups.items():
             # if circle of suck does not yet exist for this group
             group_path = group_node.name
@@ -206,7 +211,7 @@ def bot(SEASON_YEAR, SPORT, LEAGUE):
                 if circle_of_suck is not None:
                     # save circle of suck
                     with open(suck_path, 'w') as file:
-                        json.dump(circle_of_suck, file)
+                        json.dump(circle_of_suck, file, default=custom_encoder, indent=4)
 
                 # TODO
                 # else if no circle of suck exists
@@ -215,6 +220,7 @@ def bot(SEASON_YEAR, SPORT, LEAGUE):
         return
 
     tree = fetch_tree(SEASON_YEAR)
+    print(tree)
     save_circles_of_suck(tree, SEASON_YEAR)
 
 if __name__ == "__main__":
@@ -222,4 +228,4 @@ if __name__ == "__main__":
     league = 'nfl'
     season_year = 2023
     
-    bot(season_year, sport, league)
+    bot(sport, league, season_year)

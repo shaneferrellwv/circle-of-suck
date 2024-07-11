@@ -31,21 +31,39 @@ class TeamNode(NodeMixin):
 
     def __repr__(self):
         return self.__str__()
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'abbreviation': self.abbreviation,
+            'logo': self.logo,
+            'parent': self.parent.name if self.parent else None
+        }
 
 class Game(NodeMixin):
-    def __init__(self, id, date, home_team, away_team, home_score, away_score):
+    def __init__(self, id, date, week, home_team, away_team, home_score, away_score):
         self.id = id
         self.date = date
+        self.week = week
         self.home_team = home_team
         self.away_team = away_team
         self.home_score = home_score
         self.away_score = away_score
 
     def __str__(self):
-        return f"{self.date} {self.home_team.abbreviation} vs {self.away_team.abbreviation}: {self.home_score}-{self.away_score}"
+        return f"{self.week} {self.home_team.abbreviation} vs {self.away_team.abbreviation}: {self.home_score}-{self.away_score}"
 
     def __repr__(self):
         return self.__str__()
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'week': self.week,
+            'home_score': self.home_score,
+            'away_score': self.away_score
+        }
     
 class Tree:
     def __init__(self, root, teams, groups, game_ids):
@@ -68,14 +86,12 @@ class CircleOfSuck:
 
         team_mapping = {i: team for i, team in enumerate(teams)}
 
-        for index in cycle:
-            self.teams.append(team_mapping[index])
-
         for i in range(len(cycle) - 1):
             u = cycle[i]
             v = cycle[i + 1]
             game = edges[(u, v)]
             self.games.append(game)
+            self.teams.append(team_mapping[i])
 
     def __str__(self):
         str = ''
@@ -95,3 +111,10 @@ class CircleOfSuck:
 
     def __repr__(self):
         return self.__str__()
+    
+    def to_dict(self):
+        return {
+            'group_name': self.group_name,
+            'teams': [team.to_dict() for team in self.teams],
+            'games': [game.to_dict() for game in self.games]
+        }
