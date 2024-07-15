@@ -61,6 +61,8 @@ class Game(NodeMixin):
         return {
             'id': self.id,
             'week': self.week,
+            'home_abbreviation': self.home_team.abbreviation,
+            'away_abbreviation': self.away_team.abbreviation,
             'home_score': self.home_score,
             'away_score': self.away_score
         }
@@ -91,7 +93,7 @@ class CircleOfSuck:
             v = cycle[i + 1]
             game = edges[(u, v)]
             self.games.append(game)
-            self.teams.append(team_mapping[i])
+            self.teams.append(team_mapping[cycle[i]])
 
     def __str__(self):
         str = ''

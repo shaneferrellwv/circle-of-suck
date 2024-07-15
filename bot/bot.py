@@ -2,7 +2,7 @@ import os
 import requests
 import json
 import pickle
-from anytree import NodeMixin, RenderTree, PreOrderIter
+from anytree import RenderTree
 from anytree.util import commonancestors
 
 import sys
@@ -17,7 +17,7 @@ from algorithm.circle_of_suck import suck
 def pretty_print(data):
     print(json.dumps(data, indent=4))
 
-def bot(SPORT, LEAGUE, SEASON_YEAR):
+def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
 
     # ==================================================
     #                    API calls
@@ -131,12 +131,11 @@ def bot(SPORT, LEAGUE, SEASON_YEAR):
     #                     pickling
     # ==================================================
 
-    def fetch_tree(SEASON_YEAR, season_type = 2):
+    def fetch_tree(season_type = 2):
         # create data subdirectories if they don't already exist
         directory_path = f'data/{LEAGUE}/{SEASON_YEAR}'
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
-            os.makedirs(directory_path + '/suck')
 
         tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.pkl'
 
@@ -159,7 +158,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR):
             groups_dict[root.name] = root
 
             # construct the skeleton of the tree (conferences & teams)
-            root_response = core_api_call([f'/seasons/{SEASON_YEAR}/types/{season_type}'])
+            root_response = core_api_call([f'/seasons/{SEASON_YEAR}/types/{season_type}{GROUP_EXTENSION}'])
             tree, teams_dict, groups_dict = construct_tree(root, root_response, groups_dict)
 
             # decorate the tree skeleton with game results
@@ -190,42 +189,63 @@ def bot(SPORT, LEAGUE, SEASON_YEAR):
                 pickle.dump(finished_game_ids, file)
         return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
-    def save_circles_of_suck(tree, SEASON_YEAR):
-
-        # encoder to write Circle of Suck, Team Nodes, and Game Nodes to JSON
-        def custom_encoder(obj):
-            if hasattr(obj, 'to_dict'):
-                return obj.to_dict()
-            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+    def save_circles_of_suck(tree):
+        
+        # open suck tree
+        suck_tree_path = 'data/suck_tree.json'
+        with open(suck_tree_path, 'r') as file:
+            suck_tree = json.load(file)
 
         for name, group_node in tree.groups.items():
-            # if circle of suck does not yet exist for this group
-            group_path = group_node.name
-            group_path = group_path.replace(' ', '_').lower()
-            suck_path = f'data/{LEAGUE}/{SEASON_YEAR}/suck/{group_path}.json'
-            if not os.path.exists(suck_path):
+            # if circle of suck already exists, break and try next group
+            circle_of_suck_exists = True
+            if SPORT in suck_tree:
+                if str(SEASON_YEAR) in suck_tree[SPORT]:
+                    current_item = suck_tree[SPORT][str(SEASON_YEAR)]
+                    for node in list(group_node.path):
+                        if node.name not in current_item:
+                            circle_of_suck_exists = False
+                            break
+                        else:
+                            current_item = current_item[node.name]
+                    if circle_of_suck_exists:
+                        if 'suck' in current_item:
+                            break
+
                 # find if circle of suck exists for this subtree
-                circle_of_suck = suck(group_node)
+            circle_of_suck = suck(group_node)
 
-                # if circle of suck exists
-                if circle_of_suck is not None:
-                    # save circle of suck
-                    with open(suck_path, 'w') as file:
-                        json.dump(circle_of_suck, file, default=custom_encoder, indent=4)
+            # if circle of suck exists
+            if circle_of_suck is not None:
+                # save circle of suck
 
-                # TODO
-                # else if no circle of suck exists
-                    # if potential circles of suck exist
-                        # save potential circles of suck
+                # add league to suck tree
+                if SPORT not in suck_tree:
+                    suck_tree[SPORT] = {}
+                suck_subtree = suck_tree[SPORT]
+                if str(SEASON_YEAR) not in suck_subtree:
+                    suck_subtree[str(SEASON_YEAR)] = {}
+                suck_subtree = suck_subtree[str(SEASON_YEAR)]
+                for group in list(group_node.path):
+                    if group.name not in suck_subtree:
+                        suck_subtree[group.name] = {}
+                    suck_subtree = suck_subtree[group.name]
+                suck_subtree['suck'] = circle_of_suck.to_dict()
+
+                with open(suck_tree_path, 'w') as file:
+                    json.dump(suck_tree, file, indent=4)
+
+            # TODO
+            # else if no circle of suck exists
+                # if potential circles of suck exist
+                    # save potential circles of suck
         return
 
-    tree = fetch_tree(SEASON_YEAR)
-    print(tree)
-    save_circles_of_suck(tree, SEASON_YEAR)
+    tree = fetch_tree()
+    save_circles_of_suck(tree)
 
 if __name__ == "__main__":
-    sport = 'football'
-    league = 'nfl'
-    season_year = 2023
-    
-    bot(sport, league, season_year)
+    sport = 'basketball'
+    league = 'mens-college-basketball'
+    for season_year in range(2018, 2024):
+        bot(sport, league, season_year, '/groups/50')
