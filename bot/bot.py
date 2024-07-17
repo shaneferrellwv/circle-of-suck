@@ -109,7 +109,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
                     # skip this game if we do not have info for one of the teams
                     home_id = event['competitions'][0]['competitors'][0]['id']
                     away_id = event['competitions'][0]['competitors'][1]['id']
-                    if home_id not in teams_dict or away_id not in teams_dict:
+                    if home_id not in teams_dict or away_id not in teams_dict or 'score' not in event['competitions'][0]['competitors'][0] or 'score' not in event['competitions'][0]['competitors'][1]:
                         continue
                     finished_games_ids.add(event['id'])
 
@@ -117,7 +117,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
                     game_info = Game(
                         event['id'],
                         event['date'],
-                        event['week']['text'],
+                        event['week']['text'] if 'week' in event else '0',
                         teams_dict[home_id],
                         teams_dict[away_id],
                         int(event['competitions'][0]['competitors'][0]['score']['value']),
@@ -213,27 +213,29 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
                             break
 
                 # find if circle of suck exists for this subtree
-            circle_of_suck = suck(group_node)
+            # if group_node.name != "NCAA Women's Basketball" and group_node.name != "NCAA Division I":
+            if True:
+                circle_of_suck = suck(group_node)
 
-            # if circle of suck exists
-            if circle_of_suck is not None:
-                # save circle of suck
+                # if circle of suck exists
+                if circle_of_suck is not None:
+                    # save circle of suck
 
-                # add league to suck tree
-                if SPORT not in suck_tree:
-                    suck_tree[SPORT] = {}
-                suck_subtree = suck_tree[SPORT]
-                if str(SEASON_YEAR) not in suck_subtree:
-                    suck_subtree[str(SEASON_YEAR)] = {}
-                suck_subtree = suck_subtree[str(SEASON_YEAR)]
-                for group in list(group_node.path):
-                    if group.name not in suck_subtree:
-                        suck_subtree[group.name] = {}
-                    suck_subtree = suck_subtree[group.name]
-                suck_subtree['suck'] = circle_of_suck.to_dict()
+                    # add league to suck tree
+                    if SPORT not in suck_tree:
+                        suck_tree[SPORT] = {}
+                    suck_subtree = suck_tree[SPORT]
+                    if str(SEASON_YEAR) not in suck_subtree:
+                        suck_subtree[str(SEASON_YEAR)] = {}
+                    suck_subtree = suck_subtree[str(SEASON_YEAR)]
+                    for group in list(group_node.path):
+                        if group.name not in suck_subtree:
+                            suck_subtree[group.name] = {}
+                        suck_subtree = suck_subtree[group.name]
+                    suck_subtree['suck'] = circle_of_suck.to_dict()
 
-                with open(suck_tree_path, 'w') as file:
-                    json.dump(suck_tree, file, indent=4)
+                    with open(suck_tree_path, 'w') as file:
+                        json.dump(suck_tree, file, indent=4)
 
             # TODO
             # else if no circle of suck exists
@@ -245,7 +247,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
     save_circles_of_suck(tree)
 
 if __name__ == "__main__":
-    sport = 'basketball'
-    league = 'mens-college-basketball'
+    sport = 'baseball'
+    league = 'college-baseball'
     for season_year in range(2018, 2024):
-        bot(sport, league, season_year, '/groups/50')
+        bot(sport, league, season_year, '/groups/26')
