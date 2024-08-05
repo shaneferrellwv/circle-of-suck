@@ -9,4 +9,4 @@ data
 *.pkl
 
 # website
-/web
+web
