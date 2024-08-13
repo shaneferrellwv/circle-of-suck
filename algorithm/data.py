@@ -118,7 +118,7 @@ class CircleOfSuck:
     def __str__(self):
         str = ''
         for game in self.games:
-            if game.home_score > game.away_score:
+            if game.home_team_won:
                 winning_team = game.home_team
                 winner_score = game.home_score
                 losing_team = game.away_team
@@ -140,3 +140,41 @@ class CircleOfSuck:
             'teams': [team.to_dict() for team in self.teams],
             'games': [game.to_dict() for game in self.games]
         }
+    
+class PotentialCircleOfSuck:
+    def __init__(self, group_name, cycle, edges, teams, finished_game_ids):
+        self.group_name = group_name
+        self.teams = []
+        self.games = []
+        self.finished_game_ids = finished_game_ids
+
+        team_mapping = {i: team for i, team in enumerate(teams)}
+
+        for i in range(len(cycle) - 1):
+            u = cycle[i]
+            v = cycle[i + 1]
+            game = edges[(u, v)]
+            self.games.append(game)
+            self.teams.append(team_mapping[cycle[i]])
+
+    def __str__(self):
+        str = ''
+        for game in self.games:
+            if game.home_team_won:
+                winning_team = game.home_team
+                winner_score = game.home_score
+                losing_team = game.away_team
+                loser_score = game.away_score
+            else:
+                winning_team = game.away_team
+                winner_score = game.away_score
+                loser_score = game.home_score
+                losing_team = game.home_team
+            if game.id in self.finished_game_ids:
+                str += f'{convert_date(game.date)} {winning_team} -> {losing_team}: {winner_score}-{loser_score}\n'
+            else:
+                str += f'********{convert_date(game.date)} {winning_team} must defeat {losing_team}********\n'
+        return str
+
+    def __repr__(self):
+        return self.__str__()

@@ -8,8 +8,9 @@ from anytree.util import commonancestors
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from algorithm.data import Tree, GroupNode, TeamNode, Game
+from algorithm.data import Tree, GroupNode, TeamNode, Game, UpcomingGame
 from algorithm.circle_of_suck import suck
+from algorithm.potential_circle_of_suck import resuck
 
 # ==================================================
 #                 utility functions
@@ -27,7 +28,7 @@ def todays_date_in_range(item):
 
     return start_date <= current_date <= end_date
 
-def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
+def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
     # ==================================================
     #                    API calls
@@ -62,19 +63,21 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
     #                   Data Scraping
     # ==================================================
 
-    def fetch_latest_season(sport, league):
-        seasons_response = core_api_call([f'/seasons'])
-        if 'items' in seasons_response:
-            latest_season_response = pure_api_call(seasons_response['items'][0]['$ref'])
-            return latest_season_response
+    def fetch_season():
+        return core_api_call([f'/seasons/{SEASON_YEAR}/types/{SEASON_TYPE}'])
         
-    def season_active(season_response, season_type = 2):
-        if 'types' in season_response:
-            for item in season_response['types']['items']:
-                if item['type'] == season_type:
-                    if todays_date_in_range(item):
-                        return True
+    def season_active(season_response):
+        if season_response['type'] == SEASON_TYPE:
+            if todays_date_in_range(season_response):
+                return True
         return False
+    
+    def fetch_current_week():
+        season_response = fetch_season()
+        if 'week' in season_response:
+            return season_response['week']['text']
+        else:
+            return 0
 
     # recursive function to collect league hierarchy
     def construct_tree(root, root_response, groups_dict, teams_dict = {}):
@@ -116,8 +119,17 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
         group_node = groups_dict[group_name]
         group_node.games.add(game_info)
 
-    def decorate_tree(root, groups_dict, teams_dict, SEASON_YEAR):
-        finished_games_ids = set()
+    # adds upcoming game info to lowest common ancestor group node for the two teams
+    def insert_upcoming_game(game_info, groups_dict):
+        home_team = game_info.home_team
+        away_team = game_info.away_team
+        group_name = commonancestors(home_team, away_team)[-1].name
+        group_node = groups_dict[group_name]
+        group_node.upcoming_games.add(game_info)
+
+    def decorate_tree(root, groups_dict, teams_dict, SEASON_YEAR, finished_games_ids = set(), upcoming_games_ids = set()):
+        current_week = fetch_current_week()
+
         # for each team in our league hierarchy
         for name, team_node in teams_dict.items():
             print("Scraping", team_node.name + '...')
@@ -128,7 +140,27 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
             for event in team_schedule:
 
                 # check if game was previously scraped
-                if event['id'] not in finished_games_ids:
+                if event['id'] not in finished_games_ids and event['id'] not in upcoming_games_ids:
+
+                    # get games from upcoming week
+                    if not event['competitions'][0]['status']['type']['completed']:
+
+                        if 'week' in event and event['week']['text'] == current_week:
+
+                            upcoming_games_ids.add(event['id'])
+
+                            # collect game info and results
+                            home_id = event['competitions'][0]['competitors'][0]['id']
+                            away_id = event['competitions'][0]['competitors'][1]['id']
+
+                            game_info = UpcomingGame(
+                                event['id'],
+                                event['date'],
+                                event['week']['text'] if 'week' in event else '0',
+                                teams_dict[home_id],
+                                teams_dict[away_id],
+                            )
+                            insert_upcoming_game(game_info, groups_dict)
                     
                     # skip this game if we do not have info for one of the teams
                     home_id = event['competitions'][0]['competitors'][0]['id']
@@ -214,9 +246,8 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
 
-        tree_path = f'data/{LEAGUE}/{SEASON_YEAR}/tree.pkl'
-
-        # if tree has already been constructed for this season
+        # if tree has not yet been constructed for this season
+        tree_path = f'{directory_path}/tree.pkl'
         if not os.path.exists(tree_path):
             make_tree(tree_path)
 
@@ -244,7 +275,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
                 json.dump(suck_tree, file, indent=4)
         
         # open suck tree
-        suck_tree_path = 'data/suck_tree_test.json'
+        suck_tree_path = 'data/suck_tree.json'
         with open(suck_tree_path, 'r') as file:
             suck_tree = json.load(file)
 
@@ -272,41 +303,57 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, GROUP_EXTENSION = ''):
                 if circle_of_suck is not None:
                     save_circle_of_suck(circle_of_suck)
 
-                # TODO
-                # else if no circle of suck exists
-                    # find if potential circle of suck exists for this subtree
-                    # if potential circles of suck exist
-                        # save potential circles of suck
         return
 
-    season_type = 2
-    tree = fetch_tree(season_type)
+    season_response = fetch_season()
+    # if season_active(season_response):
+    tree = fetch_tree()
     find_circles_of_suck(tree)
 
 if __name__ == "__main__":
     sports = {
-        'football': 
-            [
-                {'college-football': '/groups/90'},
-                'nfl'
-            ],
-        'basketball':
-            [
-                {'mens-college-basketball': '/groups/50'},
-                {'womens-college-basketball': '/groups/50'},
-                'nba'
-            ],
-        'baseball':
-            [
-                'mlb'
-            ]
+        'football': [
+            {'nfl': {
+                'season': '2023',
+                'season_type': 2
+            }},
+            {'college-football': {
+                'season': '2023',
+                'season_type': 2,
+                'group': '/groups/90'
+            }},
+        ],
+        'basketball': [
+            {'mens-college-basketball': {
+                'season': '2023',
+                'season_type': 2,
+                'group': '/groups/50'
+            }},
+            {'womens-college-basketball': {
+                'season': '2023',
+                'season_type': 2,
+                'group': '/groups/50'
+            }},
+            {'nba': {
+                'season': '2023',
+                'season_type': 2
+            }}
+        ],
+        'baseball': [
+            {'mlb': {
+                'season': '2024',
+                'season_type': 2
+            }}
+        ]
     }
     
-    for season_year in range(2022, 2024):
-        for sport, leagues in sports.items():
-            for league in leagues:
-                if isinstance(league, dict):
-                    for league_name, group in league.items():
-                        bot(sport, league_name, season_year, group)
-                else:
-                    bot(sport, league, season_year)
+    for sport, leagues in sports.items():
+        for league in leagues:
+            if isinstance(league, dict):
+                for league_name, details in league.items():
+                    season = details['season']
+                    season_type = details['season_type']
+                    group = details.get('group', '')
+
+                    bot(sport, league_name, season, season_type, group)
+
