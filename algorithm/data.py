@@ -2,6 +2,15 @@ from anytree import NodeMixin
 from datetime import datetime
 
 # ==================================================
+#                 utility functions
+# ==================================================
+
+def convert_date(date_str):
+    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%MZ')
+    formatted_date = date_obj.strftime('%b %d, %Y').replace(" 0", " ")
+    return formatted_date
+
+# ==================================================
 #              custom data structures
 # ==================================================
 
@@ -11,6 +20,7 @@ class GroupNode(NodeMixin):
         self.abbreviation = abbreviation
         self.parent = parent
         self.games = set()
+        self.upcoming_games = set()
 
     def __str__(self):
         return f"{self.name} ({self.abbreviation})"
@@ -42,7 +52,7 @@ class TeamNode(NodeMixin):
         }
 
 class Game(NodeMixin):
-    def __init__(self, id, date, week, home_team, away_team, home_score, away_score):
+    def __init__(self, id, date, week, home_team, away_team, home_score, away_score, home_team_won):
         self.id = id
         self.date = date
         self.week = week
@@ -50,6 +60,7 @@ class Game(NodeMixin):
         self.away_team = away_team
         self.home_score = home_score
         self.away_score = away_score
+        self.home_team_won = home_team_won
 
     def __str__(self):
         return f"{self.week} {self.home_team.abbreviation} vs {self.away_team.abbreviation}: {self.home_score}-{self.away_score}"
@@ -64,8 +75,23 @@ class Game(NodeMixin):
             'home_abbreviation': self.home_team.abbreviation,
             'away_abbreviation': self.away_team.abbreviation,
             'home_score': self.home_score,
-            'away_score': self.away_score
+            'away_score': self.away_score,
+            'home_team_won': self.home_team_won
         }
+    
+class UpcomingGame(NodeMixin):
+    def __init__(self, id, date, week, home_team, away_team,):
+        self.id = id
+        self.date = date
+        self.week = week
+        self.home_team = home_team
+        self.away_team = away_team
+
+    def __str__(self):
+        return f"{self.week} {self.home_team.abbreviation} vs {self.away_team.abbreviation}"
+
+    def __repr__(self):
+        return self.__str__()
     
 class Tree:
     def __init__(self, root, teams, groups, game_ids):
@@ -73,12 +99,6 @@ class Tree:
         self.teams = teams
         self.groups = groups
         self.game_ids = game_ids
-
-        
-def convert_date(date_str):
-    date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%MZ')
-    formatted_date = date_obj.strftime('%b %d, %Y').replace(" 0", " ")
-    return formatted_date
 
 class CircleOfSuck:
     def __init__(self, group_name, cycle, edges, teams):

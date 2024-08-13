@@ -135,7 +135,7 @@ def construct_graph(games, teams):
         home_index = team_to_index[game.home_team.name]
         away_index = team_to_index[game.away_team.name]
         
-        if game.home_score > game.away_score:
+        if game.home_team_won == 'true':
             winner_index = home_index
             loser_index = away_index
         else:
