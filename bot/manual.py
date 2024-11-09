@@ -153,14 +153,15 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                             home_id = event['competitions'][0]['competitors'][0]['id']
                             away_id = event['competitions'][0]['competitors'][1]['id']
 
-                            game_info = UpcomingGame(
-                                event['id'],
-                                event['date'],
-                                event['week']['text'] if 'week' in event else '0',
-                                teams_dict[home_id],
-                                teams_dict[away_id],
-                            )
-                            insert_upcoming_game(game_info, groups_dict)
+                            if away_id in teams_dict and home_id in teams_dict:
+                                game_info = UpcomingGame(
+                                    event['id'],
+                                    event['date'],
+                                    event['week']['text'] if 'week' in event else '0',
+                                    teams_dict[home_id],
+                                    teams_dict[away_id],
+                                )
+                                insert_upcoming_game(game_info, groups_dict)
                     
                     # skip this game if we do not have info for one of the teams
                     home_id = event['competitions'][0]['competitors'][0]['id']
@@ -273,11 +274,32 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
             with open(suck_tree_path, 'w') as file:
                 json.dump(suck_tree, file, indent=4)
+
+        def save_potential_circle_of_suck(circle_of_suck):
+            if SPORT not in suck_tree:
+                potential_suck_tree[SPORT] = {}
+            potential_suck_subtree = potential_suck_tree[SPORT]
+            if str(SEASON_YEAR) not in potential_suck_subtree:
+                potential_suck_subtree[str(SEASON_YEAR)] = {}
+            potential_suck_subtree = potential_suck_subtree[str(SEASON_YEAR)]
+            for group in list(group_node.path):
+                if group.name not in potential_suck_subtree:
+                    potential_suck_subtree[group.name] = {}
+                potential_suck_subtree = potential_suck_subtree[group.name]
+            potential_suck_subtree['suck'] = circle_of_suck.to_dict()
+
+            with open(potential_suck_tree_path, 'w') as file:
+                json.dump(potential_suck_tree, file, indent=4)
         
         # open suck tree
         suck_tree_path = 'data/suck_tree.json'
         with open(suck_tree_path, 'r') as file:
             suck_tree = json.load(file)
+
+        # potential suck tree
+        potential_suck_tree_path = 'data/suck_tree.json'
+        with open(potential_suck_tree_path, 'r') as file:
+            potential_suck_tree = json.load(file)
 
         for name, group_node in tree.groups.items():
             if len(group_node.leaves) < 50:
@@ -303,6 +325,18 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 if circle_of_suck is not None:
                     save_circle_of_suck(circle_of_suck)
 
+                # # else if no circle of suck exists
+                # elif len(group_node.leaves) < 20:
+                # # else:
+                #     # find if potential circle of suck exists for this subtree
+                #     potential_circles_of_suck = resuck(group_node, tree.finished_games_ids)
+
+                #     # if potential circles of suck exist
+                #     if potential_circles_of_suck is not None:
+                #         # save potential circles of suck
+                #         for potential_circle_of_suck in potential_circles_of_suck:
+                #             save_potential_circle_of_suck(potential_circle_of_suck)
+
         return
 
     season_response = fetch_season()
@@ -314,36 +348,14 @@ if __name__ == "__main__":
     sports = {
         'football': [
             {'nfl': {
-                'season': '2023',
+                'season': '2024',
                 'season_type': 2
             }},
             {'college-football': {
-                'season': '2023',
+                'season': '2024',
                 'season_type': 2,
                 'group': '/groups/90'
             }},
-        ],
-        'basketball': [
-            {'mens-college-basketball': {
-                'season': '2023',
-                'season_type': 2,
-                'group': '/groups/50'
-            }},
-            {'womens-college-basketball': {
-                'season': '2023',
-                'season_type': 2,
-                'group': '/groups/50'
-            }},
-            {'nba': {
-                'season': '2023',
-                'season_type': 2
-            }}
-        ],
-        'baseball': [
-            {'mlb': {
-                'season': '2024',
-                'season_type': 2
-            }}
         ]
     }
     
