@@ -82,6 +82,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
     # recursive function to collect league hierarchy
     def construct_tree(root, root_response, groups_dict, teams_dict = {}):
         if 'groups' in root_response:
+            print("Scraping", root_response['name'] + '...')
             groups_response = pure_api_call(root_response['groups']['$ref'])
             for item in groups_response['items']:
                 item_response = pure_api_call(item['$ref'])
@@ -135,9 +136,29 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             print("Scraping", team_node.name + '...')
             
             # fetch team's schedule
+                directory_path = f'data/{LEAGUE}/{SEASON_YEAR}'
+                if not os.path.exists(directory_path):
+                    os.makedirs(directory_path)
+
+                # if tree has not yet been constructed for this season
+                tree_path = f'{directory_path}/tree.pkl'
+                if not os.path.exists(tree_path):
+                
+            
             response = base_api_call([f'/teams/{team_node.id}/schedule?season={SEASON_YEAR}?pageSize={PAGE_SIZE}'])
             team_schedule = response['events']
+
+            # save schedule
+
+
+            # sort all events in schedule by date
+
+
+            # scrape games not completed starting with earliest incomplete game
+
             for event in team_schedule:
+
+                
 
                 # check if game was previously scraped
                 if event['id'] not in finished_games_ids and event['id'] not in upcoming_games_ids:
@@ -165,7 +186,11 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                     # skip this game if we do not have info for one of the teams
                     home_id = event['competitions'][0]['competitors'][0]['id']
                     away_id = event['competitions'][0]['competitors'][1]['id']
-                    if home_id not in teams_dict or away_id not in teams_dict or 'score' not in event['competitions'][0]['competitors'][0] or 'score' not in event['competitions'][0]['competitors'][1] or 'winner' not in event['competitions'][0]['competitors'][0] or 'winner' not in event['competitions'][0]['competitors'][1]:
+                    if (home_id not in teams_dict or away_id not in teams_dict                  # team is not known in this league                 
+                        or 'score' not in event['competitions'][0]['competitors'][0]            # score is missing
+                        or 'score' not in event['competitions'][0]['competitors'][1]
+                        or 'winner' not in event['competitions'][0]['competitors'][0]           # winner is unknown
+                        or 'winner' not in event['competitions'][0]['competitors'][1]):
                         continue
                     # skip this game if it is not yet complete
                     if 'status' not in event['competitions'][0] or not event['competitions'][0]['status']['type']['completed']:
