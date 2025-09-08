@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from datetime import datetime, timezone
-from dateutil import parser, tz
+from zoneinfo import ZoneInfo
 
 # ==================================================
 #                 utility functions
@@ -10,6 +10,12 @@ from dateutil import parser, tz
 
 def pretty_print(data):
     print(json.dumps(data, indent=4))
+
+def to_new_york_time(timestr: str, fmt: str = "%Y-%m-%dT%H:%MZ") -> str:
+    dt_utc = datetime.strptime(timestr, fmt).replace(tzinfo=ZoneInfo("UTC"))
+    dt_ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
+    
+    return dt_ny.strftime("%Y-%m-%dT%H:%M%z")
 
 def todays_date_in_range(item):
     start_date_str = item['startDate']
@@ -136,7 +142,7 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
         return node
     
-    def save_result(results, event):
+    def save_result(results, new_result):
 
         # constructs mapping from team to all its group nodes
         def build_index(root):
@@ -164,20 +170,14 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         
         index = build_index(results)
         try:
-            home_id = event['competitions'][0]['competitors'][0]['id']
-            away_id = event['competitions'][0]['competitors'][1]['id']
-            paths = [index[home_id]['path'], index[away_id]['path']]
+            paths = [index[new_result['home_id']]['path'], index[new_result['away_id']]['path']]
         except KeyError as e:
             raise ValueError(f"Unknown team id: {e.args[0]}")
         chain = _shared_ancestor_chain(paths)
         if not chain:
             raise ValueError("No shared ancestor for the given team ids.")
         for node in chain:
-            result = {
-                'id': ,
-                'home'
-            }
-            node.setdefault('results', []).append(result)
+            node.setdefault('results', []).append(new_result)
         return chain
     
     # ==================================================
@@ -193,8 +193,9 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         season_info_path = f"data/{LEAGUE_NAME}/{SEASON_YEAR}/{SEASON_TYPE}/season_info.json"
 
         # create season_info.json file if it doesn't exist yet
+        os.makedirs(os.path.dirname(season_info_path), exist_ok=True)
         if not os.path.exists(season_info_path):
-            with open(season_info_path, "w") as f:
+            with open(season_info_path, "x") as f:
                 pass
 
         # fetch cached season info if it exists and was updated today
@@ -204,10 +205,10 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 season_info = json.loads(content)
                 if "last_updated" in season_info:
                     if is_today(season_info["last_updated"]):
-                        print(f'\tusing season info updated at {season_info['last_updated']}')
+                        print(f'\tusing season info updated at {to_new_york_time(season_info['last_updated'])}')
                         return season_info
                     else:
-                        print(f'\t{LEAGUE_NAME} has not been refreshed since {season_info['last_updated']}')
+                        print(f'\t{LEAGUE_NAME} has not been refreshed since {to_new_york_time(season_info['last_updated'])}')
 
         # otherwise fetch today's season info
         print(f"Fetching {LEAGUE_NAME} {SEASON_YEAR} {SEASON_TYPE} season info...")
@@ -227,15 +228,16 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         league_tree_path = f"data/{LEAGUE_NAME}/{SEASON_YEAR}/{SEASON_TYPE}/league_tree.json"
 
         # create league_tree.json file if it doesn't exist yet
+        os.makedirs(os.path.dirname(league_tree_path), exist_ok=True)
         if not os.path.exists(league_tree_path):
             with open(league_tree_path, "w") as f:
                 pass
 
-        # check if divisions tree has been constructed for this season
+        # open league_tree.json file
         with open(league_tree_path, "r") as f:
             content = f.read().strip()
 
-            # if it has been constructed yet for this season, make it
+            # if it has not been constructed yet for this season, make it
             if not content:
                 print(f"Fetching {LEAGUE_NAME} {SEASON_YEAR} {SEASON_TYPE} league structure...")
                 league_tree = make_league_tree()
@@ -249,12 +251,13 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             content = f.read().strip()
             league_tree = json.loads(content)
 
-    def fetch_scores(season_info, current_week):
+    def fetch_scores(current_week):
 
         results_path = f"data/{LEAGUE_NAME}/{SEASON_YEAR}/{SEASON_TYPE}/results.json"
-        league_tree_path = f"data/{LEAGUE_NAME}/{SEASON_YEAR}/{SEASON_TYPE}/league_tree_path.json"
+        league_tree_path = f"data/{LEAGUE_NAME}/{SEASON_YEAR}/{SEASON_TYPE}/league_tree.json"
 
         # create results.json file if it doesn't exist yet
+        os.makedirs(os.path.dirname(results_path), exist_ok=True)
         if not os.path.exists(results_path):
             try:
                 with open(league_tree_path, 'r') as f_in:
@@ -262,8 +265,6 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 with open(results_path, 'w') as f_out:
                     json.dump(data, f_out, indent=4)
                 print(f"'{league_tree_path}' copied to '{results_path}' successfully.")
-            except FileNotFoundError:
-                print(f"Error: '{league_tree_path}' not found.")
             except json.JSONDecodeError:
                 print(f"Error: Invalid JSON format in '{league_tree_path}'.")
             except Exception as e:
@@ -279,24 +280,41 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         print(f"Fetching {LEAGUE_NAME} {SEASON_YEAR} {SEASON_TYPE} Week #{current_week} scoreboard...")
         scoreboard_response = base_api_call([f"/scoreboard?dates={SEASON_YEAR}&seasontype={SEASON_TYPE}&week={current_week}"])
         
-        pretty_print(scoreboard_response)
+        pretty_print(scoreboard_response['events'])
 
         # find completed games that have not been scraped yet
+        did_fetch_new_results = False
         for event in scoreboard_response['events']:
             if event['status']['type']['completed']:
                 if event['id'] not in results['games']:
+                    did_fetch_new_results = True
                     # add it to results.json
-                    results = save_result(results, event)
+                    new_result = {
+                        'id': event['id'],
+                        'date': event['date'],
+                        'week': current_week,
+                        'home_id': event['competitions'][0]['competitors'][0]['id'],
+                        'home_name': event['competitions'][0]['competitors'][0]['displayName'],
+                        'home_score': int(event['competitions'][0]['competitors'][0]['score']['value']),
+                        'away_id': event['competitions'][0]['competitors'][1]['id'],
+                        'away_name': event['competitions'][0]['competitors'][1]['displayName'],
+                        'away_score': int(event['competitions'][0]['competitors'][1]['score']['value']),
+                        'home_team_won': event['competitions'][0]['competitors'][0]['winner']
+                    }
+                    results = save_result(results, new_result)
+                    pass
 
         # update results.json
         with open(results_path, 'w') as f:
             json.dump({}, f)
             json.dump(results, f, indent=4)
 
+        return did_fetch_new_results
 
-    # ============= script starts here: ===============
+    # ============= script entry here: ===============
         
     # get info for this season
+    # contains 
     season_info = fetch_season_info()
 
     # check if season is active
@@ -307,22 +325,7 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
     fetch_league_tree()
 
     # update game results
-    fetch_scores(season_info, season_info['week']['number'])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    did_fetch_new_results = fetch_scores(current_week=season_info['week']['number'])
 
 
 
@@ -332,13 +335,13 @@ if __name__ == "__main__":
             'name': 'nfl',
             'sport': 'football',
             'season_year': '2025',
-            'season_type': 1,
+            'season_type': 2,
             'group': '',
         },
         # {
-        #     'name': 'college-football',
+        #     'name': 'nfl,
         #     'sport': 'football',
-        #     'season_year': '2023',
+        #     'season_year': '2025',
         #     'season_type': 2,
         #     'group': '/groups/90',
         # }
