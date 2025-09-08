@@ -142,6 +142,8 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
         return node
     
+
+    # adds game result to all ancestor group nodes of the teams
     def save_result(results, new_result):
 
         # constructs mapping from team to all its group nodes
@@ -158,7 +160,7 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             dfs(root, [])
             return index
         
-        # return
+        # return list of shared ancestors
         def _shared_ancestor_chain(paths):
             chain = []
             for nodes in zip(*paths):
@@ -178,7 +180,8 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             raise ValueError("No shared ancestor for the given team ids.")
         for node in chain:
             node.setdefault('results', []).append(new_result)
-        return chain
+        results.setdefault('completed_game_ids', []).append(new_result['id'])
+        return results
     
     # ==================================================
     #                   data scraping
@@ -262,6 +265,8 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             try:
                 with open(league_tree_path, 'r') as f_in:
                     data = json.load(f_in) 
+                    data.setdefault("completed_game_ids", [])
+                    weeks = list(range(1, current_week + 1))
                 with open(results_path, 'w') as f_out:
                     json.dump(data, f_out, indent=4)
                 print(f"'{league_tree_path}' copied to '{results_path}' successfully.")
@@ -269,47 +274,62 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 print(f"Error: Invalid JSON format in '{league_tree_path}'.")
             except Exception as e:
                 print(f"An error occurred: {e}")
+        else:
+            weeks = [current_week]
 
         # fetch this season's results if it exists
         with open(results_path, "r") as f:
             content = f.read().strip()
             if content:
                 results = json.loads(content)
-                
-        # fetch scoreboard
-        print(f"Fetching {LEAGUE_NAME} {SEASON_YEAR} {SEASON_TYPE} Week #{current_week} scoreboard...")
-        scoreboard_response = base_api_call([f"/scoreboard?dates={SEASON_YEAR}&seasontype={SEASON_TYPE}&week={current_week}"])
-        
-        pretty_print(scoreboard_response['events'])
 
-        # find completed games that have not been scraped yet
-        did_fetch_new_results = False
-        for event in scoreboard_response['events']:
-            if event['status']['type']['completed']:
-                if event['id'] not in results['games']:
-                    did_fetch_new_results = True
-                    # add it to results.json
-                    new_result = {
+        # fetch scoreboard per week
+        for week in weeks:   
+            # fetch scoreboard
+            print(f"Fetching {LEAGUE_NAME} {SEASON_YEAR} {SEASON_TYPE} Week #{week} scoreboard...")
+            scoreboard_response = base_api_call([f"/scoreboard?dates={SEASON_YEAR}&seasontype={SEASON_TYPE}&week={week}"])
+
+            # find completed games that have not been scraped yet
+            did_fetch_new_results = False
+            for event in scoreboard_response['events']:
+                if event['status']['type']['completed']:
+                    if event['id'] not in results['completed_game_ids']:
+                        did_fetch_new_results = True
+                        # add it to results.json
+                        new_result = {
+                            'id': event['id'],
+                            'date': event['date'],
+                            'week': week,
+                            'home_id': event['competitions'][0]['competitors'][0]['id'],
+                            'home_name': event['competitions'][0]['competitors'][0]['team']['displayName'],
+                            'home_score': int(event['competitions'][0]['competitors'][0]['score']),
+                            'away_id': event['competitions'][0]['competitors'][1]['id'],
+                            'away_name': event['competitions'][0]['competitors'][1]['team']['displayName'],
+                            'away_score': int(event['competitions'][0]['competitors'][1]['score']),
+                            'home_team_won': event['competitions'][0]['competitors'][0]['winner']
+                        }
+                        print(f"Saving completed game: {new_result['away_name']} vs {new_result['home_name']}: {new_result['away_score']} vs {new_result['home_score']}")
+                        results = save_result(results, new_result)
+                        pass
+                else:
+                    new_event = {
                         'id': event['id'],
                         'date': event['date'],
-                        'week': current_week,
+                        'week': week,
                         'home_id': event['competitions'][0]['competitors'][0]['id'],
-                        'home_name': event['competitions'][0]['competitors'][0]['displayName'],
-                        'home_score': int(event['competitions'][0]['competitors'][0]['score']['value']),
+                        'home_name': event['competitions'][0]['competitors'][0]['team']['displayName'],
+                        'home_score': int(event['competitions'][0]['competitors'][0]['score']),
                         'away_id': event['competitions'][0]['competitors'][1]['id'],
-                        'away_name': event['competitions'][0]['competitors'][1]['displayName'],
-                        'away_score': int(event['competitions'][0]['competitors'][1]['score']['value']),
-                        'home_team_won': event['competitions'][0]['competitors'][0]['winner']
+                        'away_name': event['competitions'][0]['competitors'][1]['team']['displayName'],
+                        'away_score': int(event['competitions'][0]['competitors'][1]['score']),
                     }
-                    results = save_result(results, new_result)
-                    pass
+                    print(f"Awaiting final score: {new_event['away_name']} vs {new_event['home_name']}: {new_event['away_score']} vs {new_event['home_score']}")
 
         # update results.json
         with open(results_path, 'w') as f:
-            json.dump({}, f)
             json.dump(results, f, indent=4)
 
-        return did_fetch_new_results
+        return did_fetch_new_results, results
 
     # ============= script entry here: ===============
         
@@ -325,26 +345,27 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
     fetch_league_tree()
 
     # update game results
-    did_fetch_new_results = fetch_scores(current_week=season_info['week']['number'])
+    did_fetch_new_results, results = fetch_scores(current_week=season_info['week']['number'])
 
-
+    if did_fetch_new_results:
+        suck(results)
 
 if __name__ == "__main__":
     leagues = [
-        {
-            'name': 'nfl',
-            'sport': 'football',
-            'season_year': '2025',
-            'season_type': 2,
-            'group': '',
-        },
         # {
-        #     'name': 'nfl,
+        #     'name': 'nfl',
         #     'sport': 'football',
         #     'season_year': '2025',
         #     'season_type': 2,
-        #     'group': '/groups/90',
-        # }
+        #     'group': '',
+        # },
+        {
+            'name': 'college-football',
+            'sport': 'football',
+            'season_year': '2025',
+            'season_type': 2,
+            'group': '/groups/90',
+        }
     ]
 
     # for each league
