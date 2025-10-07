@@ -4,6 +4,8 @@ import requests
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from sucky import sucky
+
 # ==================================================
 #                 utility functions
 # ==================================================
@@ -334,35 +336,35 @@ def bot(LEAGUE_NAME, SPORT, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
     # ============= script entry here: ===============
         
     # get info for this season
-    # contains 
     season_info = fetch_season_info()
 
     # check if season is active
-    if not todays_date_in_range(season_info):
-        return
+    # if not todays_date_in_range(season_info):
+        # return
     
     # get league structure
     fetch_league_tree()
 
     # update game results
-    did_fetch_new_results, results = fetch_scores(current_week=season_info['week']['number'])
+    # did_fetch_new_results, results = fetch_scores(current_week=season_info['week']['number'])
+    did_fetch_new_results, results = fetch_scores(current_week=16)
 
-    if did_fetch_new_results:
-        suck(results)
+    # if did_fetch_new_results:
+    # sucky(results)
 
 if __name__ == "__main__":
     leagues = [
         # {
         #     'name': 'nfl',
         #     'sport': 'football',
-        #     'season_year': '2025',
+        #     'season_year': '2024',
         #     'season_type': 2,
         #     'group': '',
         # },
         {
             'name': 'college-football',
             'sport': 'football',
-            'season_year': '2025',
+            'season_year': '2024',
             'season_type': 2,
             'group': '/groups/90',
         }
