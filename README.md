@@ -3,4 +3,4 @@ traveling salesman algorithm implementation for finding a circle of suck and oth
 
 explore at [circleofsuck.net](https://circleofsuck.net)
 
-discover on [Twitter (@circleofsuck)](https://x.com/circleofsuck) and [Instagram (@circleofsuck)](https://instagram.com/circleofsuck)
+discover on [Twitter (@circleofsuck)](https://x.com/circleofsuck)
