@@ -1,3 +1,4 @@
+import sys
 import os
 import requests
 import json
@@ -6,11 +7,11 @@ from datetime import datetime, timezone
 from anytree import RenderTree
 from anytree.util import commonancestors
 
-import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from algorithm.data import Tree, GroupNode, TeamNode, Game, UpcomingGame
 from algorithm.circle_of_suck import suck
 from algorithm.potential_circle_of_suck import resuck
+
 
 # ==================================================
 #                 utility functions
@@ -81,12 +82,16 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
     # recursive function to collect league hierarchy
     def construct_tree(root, root_response, groups_dict, teams_dict = {}):
+        item_responses = []
         if 'groups' in root_response:
             groups_response = pure_api_call(root_response['groups']['$ref'])
             for item in groups_response['items']:
                 item_response = pure_api_call(item['$ref'])
                 group_node = GroupNode(item_response['name'], item_response['abbreviation'] if 'abbreviation' in item_response else None, root)
                 groups_dict[group_node.name] = group_node
+                item_responses.append(item_response)
+            for item_response in item_responses:
+                group_node = groups_dict[item_response['name']]
                 construct_tree(group_node, item_response, groups_dict, teams_dict)
         elif 'children' in root_response:
             print("Scraping", root_response['name'] + '...')
@@ -95,6 +100,9 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 item_response = pure_api_call(item['$ref'])
                 group_node = GroupNode(item_response['name'], item_response['abbreviation'] if 'abbreviation' in item_response else None, root)
                 groups_dict[group_node.name] = group_node
+                item_responses.append(item_response)
+            for item_response in item_responses:
+                group_node = groups_dict[item_response['name']]
                 construct_tree(group_node, item_response, groups_dict, teams_dict)
         else:
             print("Scraping", root_response['name'] + '...')
@@ -137,6 +145,8 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             # fetch team's schedule
             response = base_api_call([f'/teams/{team_node.id}/schedule?season={SEASON_YEAR}?pageSize={PAGE_SIZE}'])
             team_schedule = response['events']
+
+            # for each game in the team's schedule
             for event in team_schedule:
 
                 # check if game was previously scraped
@@ -234,7 +244,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                     for item in node.games:
                         print(item)
 
-            # save the tree
+            # save the tree (pickled)
             with open(tree_path, 'wb') as file:
                 pickle.dump(tree, file)
                 pickle.dump(teams_dict, file)
@@ -242,7 +252,7 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
                 pickle.dump(finished_game_ids, file)
 
         # create data subdirectories if they don't already exist
-        directory_path = f'data/{LEAGUE}/{SEASON_YEAR}'
+        directory_path = f'data/{SPORT}/{LEAGUE}/{SEASON_YEAR}'
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
 
@@ -259,59 +269,74 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
     def find_circles_of_suck(tree):
 
-        def save_circle_of_suck(circle_of_suck):
-            # add league to suck tree
-            if SPORT not in suck_tree:
-                suck_tree[SPORT] = {}
-            suck_subtree = suck_tree[SPORT]
-            if str(SEASON_YEAR) not in suck_subtree:
-                suck_subtree[str(SEASON_YEAR)] = {}
-            suck_subtree = suck_subtree[str(SEASON_YEAR)]
-            for group in list(group_node.path):
-                if group.name not in suck_subtree:
-                    suck_subtree[group.name] = {}
-                suck_subtree = suck_subtree[group.name]
+        def save_circle_of_suck(circle_of_suck, suck_subtree):
+            
             suck_subtree['suck'] = circle_of_suck.to_dict()
 
             with open(suck_tree_path, 'w') as file:
                 json.dump(suck_tree, file, indent=4)
         
         # open suck tree
-        suck_tree_path = 'data/suck_tree.json'
+        suck_tree_path = f'data/{SPORT}/{LEAGUE}/{SEASON_YEAR}/suck_tree.json'
+        if not os.path.exists(suck_tree_path):
+            with open(suck_tree_path, 'w') as file:
+                # add leagues to suck tree
+                suck_tree = {}
+                # recursively add groups to suck tree
+                def add_groups_to_suck_tree(group_node, subtree):
+                    if not group_node.is_leaf and group_node.name not in subtree:
+                        subtree[group_node.name] = {}
+                    for child in group_node.children:
+                        add_groups_to_suck_tree(child, subtree[group_node.name])
+                add_groups_to_suck_tree(tree.root, suck_tree)
+                json.dump(suck_tree, file)
+
         with open(suck_tree_path, 'r') as file:
             suck_tree = json.load(file)
 
-        for name, group_node in tree.groups.items():
-            if len(group_node.leaves) < 50:
-                # if circle of suck already exists, break and try next group
-                circle_of_suck_exists = True
-                if SPORT in suck_tree:
-                    if str(SEASON_YEAR) in suck_tree[SPORT]:
-                        current_item = suck_tree[SPORT][str(SEASON_YEAR)]
-                        for node in list(group_node.path):
-                            if node.name not in current_item:
-                                circle_of_suck_exists = False
-                                break
-                            else:
-                                current_item = current_item[node.name]
-                        if circle_of_suck_exists:
-                            if 'suck' in current_item:
-                                break
+        # recursively check each group node for circle of suck
+        for group_node in tree.groups.values():
 
-                # find if circle of suck exists for this subtree
-                circle_of_suck = suck(group_node)
+            print(f'Checking if circle of suck exists for {group_node.name}...')
 
-                # if circle of suck exists
-                if circle_of_suck is not None:
-                    save_circle_of_suck(circle_of_suck)
-
-                # TODO
-                # else if no circle of suck exists
+            # recursively traverse the suck tree to find the corresponding subtree for this group node
+            suck_subtree = suck_tree
+            for subgroup_node in group_node.path:
+                if subgroup_node.name in suck_subtree:
+                    suck_subtree = suck_subtree[subgroup_node.name]
                 else:
-                    # find if potential circle of suck exists for this subtree
-                    potential_circle_of_suck = resuck(group_node, tree.game_ids)
-                    # if potential circles of suck exist
-                        # save potential circles of suck
+                    suck_subtree = suck_subtree[group_node.name]
+                    break
+
+            # skip this group if circle of suck already exists or if it has too many teams
+            if suck in suck_subtree:
+                print(f'Circle of suck already exists for {group_node.name}.')
+                continue
+            elif len(group_node.leaves) > 50:
+                print(f'Skipping {group_node.name} because it has more than 50 teams.')
+                continue
+
+            # find if circle of suck exists for this subtree
+            circle_of_suck = suck(group_node)
+
+            # if circle of suck exists
+            if circle_of_suck is not None:
+
+                save_circle_of_suck(circle_of_suck, suck_subtree)
+
+                # tweet
+
+        
+
+            # TODO
+            # else if no circle of suck exists
+            # else:
+                # find if potential circle of suck exists for this subtree
+                # potential_circle_of_suck = resuck(group_node, tree.game_ids)
+                # if potential circles of suck exist
+                    # save potential circles of suck
+
+
         return
 
     season_response = fetch_season()
@@ -349,19 +374,21 @@ if __name__ == "__main__":
         ],
         'baseball': [
             {'mlb': {
-                'season': '2024',
+                'season': '2026',
                 'season_type': 2
             }}
         ]
     }
     
     for sport, leagues in sports.items():
-        for league in leagues:
-            if isinstance(league, dict):
-                for league_name, details in league.items():
-                    season = details['season']
-                    season_type = details['season_type']
-                    group = details.get('group', '')
 
-                    bot(sport, league_name, season, season_type, group)
+        for league in leagues:
+
+            for league_name, details in league.items():
+
+                season = details['season']
+                season_type = details['season_type']
+                group = details.get('group', '')
+
+                bot(sport, league_name, season, season_type, group)
 
