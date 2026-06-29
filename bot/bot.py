@@ -267,6 +267,10 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
         return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
+    # ==================================================
+    #                     automation
+    # ==================================================
+
     def find_circles_of_suck(tree):
 
         def save_circle_of_suck(circle_of_suck, suck_subtree):
@@ -312,29 +316,29 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
             if suck in suck_subtree:
                 print(f'Circle of suck already exists for {group_node.name}.')
                 continue
-            elif len(group_node.leaves) > 50:
+            if len(group_node.leaves) > 15:
                 print(f'Skipping {group_node.name} because it has more than 50 teams.')
                 continue
 
             # find if circle of suck exists for this subtree
             circle_of_suck = suck(group_node)
 
-            # if circle of suck exists
             if circle_of_suck is not None:
 
                 save_circle_of_suck(circle_of_suck, suck_subtree)
 
                 # tweet
 
-        
-
-            # TODO
-            # else if no circle of suck exists
             # else:
+
                 # find if potential circle of suck exists for this subtree
                 # potential_circle_of_suck = resuck(group_node, tree.game_ids)
-                # if potential circles of suck exist
-                    # save potential circles of suck
+
+                # if potential_circle_of_suck is not None:
+
+                    # save_potential_circle_of_suck(potential_circle_of_suck, suck_subtree)
+
+                    # tweet
 
 
         return
