@@ -28,44 +28,28 @@ def find_all_hamiltonian_cycles(adj_matrix):
     if hamiltonian_sufficiency_check(adj_matrix) is False:
         return []
 
-    memo = {}
-    path = []
-    all_cycles = []
+    n = len(adj_matrix)
+    cycles = []
+    path = [0]
 
     def visit(node, visited):
-        # base case:
-        # if all nodes are visited
-        if visited == (1 << len(adj_matrix)) - 1:
-            # and if there's an edge back to the start node
+        # All vertices have been visited
+        if visited == (1 << n) - 1:
             if adj_matrix[node][0] == 1:
-                # valid cycle found, add the first node to complete the cycle
-                all_cycles.append(path[:] + [0])
-            return  # continue searching for other cycles
+                cycles.append(path.copy() + [0])
+            return
 
-        # get result if already cached
-        if (node, visited) in memo:
-            return memo[(node, visited)]
-
-        # explore possible next nodes
-        for next_node in range(len(adj_matrix)):
-            # if next_node is connected to node and not yet visited
-            if adj_matrix[node][next_node] == 1 and not (visited & (1 << next_node)):
+        for next_node in range(1, n):
+            if (
+                adj_matrix[node][next_node] == 1
+                and not visited & (1 << next_node)
+            ):
                 path.append(next_node)
-
-                # recursive step: explore from next_node
                 visit(next_node, visited | (1 << next_node))
-
-                # backtrack
                 path.pop()
 
-        # cache the exploration result (not used for early termination now)
-        memo[(node, visited)] = False
-
-    # start search with node 0
-    path.append(0)
-    visit(0, 1 << 0)
-
-    return all_cycles
+    visit(0, 1)
+    return cycles
 
 def extract_games(root):
     games = []

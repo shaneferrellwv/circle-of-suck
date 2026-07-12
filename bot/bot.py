@@ -29,7 +29,7 @@ def todays_date_in_range(item):
 
     return start_date <= current_date <= end_date
 
-def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
+def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE = 2, GROUP_EXTENSION = '', scrape_only=False):
 
     # ==================================================
     #                    API calls
@@ -135,8 +135,13 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         group_node = groups_dict[group_name]
         group_node.upcoming_games.add(game_info)
 
-    def decorate_tree(root, groups_dict, teams_dict, SEASON_YEAR, finished_games_ids = set(), upcoming_games_ids = set()):
+    # fetches completed (and upcoming) games and adds them to the Tree to the lowest common ancestor group node for the two teams
+    def decorate_tree(root, groups_dict, teams_dict, finished_games_ids = set(), upcoming_games_ids = set()):
+
+        print(f'\nFetching new {LEAGUE} {SEASON_YEAR} games...')
+
         current_week = fetch_current_week()
+        print(f'Current Week: {current_week}\n')
 
         # for each team in our league hierarchy
         for name, team_node in teams_dict.items():
@@ -148,29 +153,37 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
 
             # for each game in the team's schedule
             for event in team_schedule:
+                        
+                # * skip games past week 8
+                # if 'week' in event and int(event['week']['text'][5:]) > 8:
+                #     continue
 
                 # check if game was previously scraped
-                if event['id'] not in finished_games_ids and event['id'] not in upcoming_games_ids:
+                if event['id'] not in finished_games_ids and event['competitions'][0]['status']['type']['completed']:
 
                     # get games from upcoming week
-                    if not event['competitions'][0]['status']['type']['completed']:
+                    # if event['id'] not in upcoming_games_ids and not event['competitions'][0]['status']['type']['completed']:
 
-                        if 'week' in event and event['week']['text'] == current_week:
+                    # if 'week' in event and int(event['week']['text'][5:]) == 8:
 
-                            upcoming_games_ids.add(event['id'])
+                        # upcoming_games_ids.add(event['id'])
 
-                            # collect game info and results
-                            home_id = event['competitions'][0]['competitors'][0]['id']
-                            away_id = event['competitions'][0]['competitors'][1]['id']
+                        # # collect game info and results
+                        # home_id = event['competitions'][0]['competitors'][0]['id']
+                        # away_id = event['competitions'][0]['competitors'][1]['id']
 
-                            game_info = UpcomingGame(
-                                event['id'],
-                                event['date'],
-                                event['week']['text'] if 'week' in event else '0',
-                                teams_dict[home_id],
-                                teams_dict[away_id],
-                            )
-                            insert_upcoming_game(game_info, groups_dict)
+                        # if home_id not in teams_dict or away_id not in teams_dict: # TODO: or date in the past!!! 
+                        #     continue
+
+                        # game_info = UpcomingGame(
+                        #     event['id'],
+                        #     event['date'],
+                        #     event['week']['text'] if 'week' in event else '0',
+                        #     teams_dict[home_id],
+                        #     teams_dict[away_id],
+                        # )
+                        # insert_upcoming_game(game_info, groups_dict)
+                        # print(game_info)
                     
                     # skip this game if we do not have info for one of the teams
                     home_id = event['competitions'][0]['competitors'][0]['id']
@@ -201,69 +214,72 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
     #                     pickling
     # ==================================================
 
-    def fetch_tree(season_type = 2):
+    def make_tree(tree_path):
+        # create root node of tree
+        league_response = core_api_call('')
+        league_name = league_response['name']
+        league_abbreviation = league_response['abbreviation']
+        root = GroupNode(league_name, league_abbreviation, None)
+        groups_dict = {}
+        groups_dict[root.name] = root
 
-        def load_tree(tree_path):
-            with open(tree_path, 'rb') as file:
-                tree = pickle.load(file)
-                teams_dict = pickle.load(file)
-                groups_dict = pickle.load(file)
-                finished_game_ids = pickle.load(file)
-                return tree, teams_dict, groups_dict, finished_game_ids
+        print(f'Constructing {LEAGUE} {SEASON_YEAR} tree...\n')
 
-        def make_tree(tree_path):
-            # create root node of tree
-            league_response = core_api_call('')
-            league_name = league_response['name']
-            league_abbreviation = league_response['abbreviation']
-            root = GroupNode(league_name, league_abbreviation, None)
-            groups_dict = {}
-            groups_dict[root.name] = root
+        # construct the skeleton of the tree (conferences & teams)
+        root_response = core_api_call([f'/seasons/{SEASON_YEAR}/types/{SEASON_TYPE}{GROUP_EXTENSION}'])
+        tree, teams_dict, groups_dict = construct_tree(root, root_response, groups_dict)
 
-            # construct the skeleton of the tree (conferences & teams)
-            root_response = core_api_call([f'/seasons/{SEASON_YEAR}/types/{season_type}{GROUP_EXTENSION}'])
-            tree, teams_dict, groups_dict = construct_tree(root, root_response, groups_dict)
+        # decorate the tree skeleton with game results
+        tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict)
+        
+        # print the tree (debug purposes)
+        print('\nLeague Structure:')
+        for pre, fill, node in RenderTree(tree):
+            print("%s%s" % (pre, node))
+        print('Groups Dict:')
+        for key, value in groups_dict.items():
+            print(f'id: {key}, Group: {value.name}')
+        print('Teams Dict:')
+        for key, value in teams_dict.items():
+            print(f'id: {key}, Team: {value.name}')
+        print('Tree (with games):')
+        print(Tree(tree, teams_dict, groups_dict, finished_game_ids))
 
-            # decorate the tree skeleton with game results
-            tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict, SEASON_YEAR)
+        # save the tree (pickled)
+        with open(tree_path, 'wb') as file:
+            pickle.dump(tree, file)
+            pickle.dump(teams_dict, file)
+            pickle.dump(groups_dict, file)
+            pickle.dump(finished_game_ids, file)
             
-            # print the tree (debug purposes)
-            print('Tree:')
-            for pre, fill, node in RenderTree(tree):
-                print("%s%s" % (pre, node))
-            print('Groups Dict:')
-            for key, value in groups_dict.items():
-                print(f'id: {key}, Group: {value.name}')
-            print('Teams Dict:')
-            for key, value in teams_dict.items():
-                print(f'id: {key}, Team: {value.name}')
-            print('Tree (with games):')
-            for pre, fill, node in RenderTree(tree):
-                print("%s%s" % (pre, node))
-                if isinstance(node, GroupNode):
-                    for item in node.games:
-                        print(item)
+        return tree
 
-            # save the tree (pickled)
-            with open(tree_path, 'wb') as file:
-                pickle.dump(tree, file)
-                pickle.dump(teams_dict, file)
-                pickle.dump(groups_dict, file)
-                pickle.dump(finished_game_ids, file)
+    def load_tree(tree_path):
+        with open(tree_path, 'rb') as file:
+            tree = pickle.load(file)
+            teams_dict = pickle.load(file)
+            groups_dict = pickle.load(file)
+            finished_game_ids = pickle.load(file)
+            return tree, teams_dict, groups_dict, finished_game_ids
 
-        # create data subdirectories if they don't already exist
-        directory_path = f'data/{SPORT}/{LEAGUE}/{SEASON_YEAR}'
-        if not os.path.exists(directory_path):
-            os.makedirs(directory_path)
+    # create data subdirectories if they don't already exist
+    directory_path = f'data/{SPORT}/{LEAGUE}/{SEASON_YEAR}'
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
 
-        # if tree has not yet been constructed for this season
-        tree_path = f'{directory_path}/tree.pkl'
-        if not os.path.exists(tree_path):
-            make_tree(tree_path)
+    # if tree has not yet been constructed for this season
+    tree_path = f'{directory_path}/tree.pkl'
+    if not os.path.exists(tree_path):
+        make_tree(tree_path)
+
+    def fetch_tree():
 
         tree, teams_dict, groups_dict, finished_game_ids = load_tree(tree_path)
 
-        tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict, SEASON_YEAR, finished_game_ids)
+        print(f'Loaded {LEAGUE} {SEASON_YEAR} tree:')
+        print(Tree(tree, teams_dict, groups_dict, finished_game_ids))
+
+        tree, finished_game_ids = decorate_tree(tree, groups_dict, teams_dict, finished_game_ids)
 
         return Tree(tree, teams_dict, groups_dict, finished_game_ids)
 
@@ -298,26 +314,29 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         with open(suck_tree_path, 'r') as file:
             suck_tree = json.load(file)
 
+        print('\nFinding circles of suck...\n')
+
         # recursively check each group node for circle of suck
         for group_node in tree.groups.values():
 
-            print(f'Checking if circle of suck exists for {group_node.name}...')
+            print(f'Searching for {group_node.name} circle of suck...')
 
             # recursively traverse the suck tree to find the corresponding subtree for this group node
             suck_subtree = suck_tree
             for subgroup_node in group_node.path:
-                if subgroup_node.name in suck_subtree:
-                    suck_subtree = suck_subtree[subgroup_node.name]
-                else:
+                # stop when we reach the corresponding group
+                if group_node.name in suck_subtree:
                     suck_subtree = suck_subtree[group_node.name]
                     break
+                # otherwise go deeper
+                suck_subtree = suck_subtree[subgroup_node.name]
 
             # skip this group if circle of suck already exists or if it has too many teams
-            if suck in suck_subtree:
-                print(f'Circle of suck already exists for {group_node.name}.')
+            if 'suck' in suck_subtree:
+                print(f'Circle of suck already exists for {group_node.name}.\n')
                 continue
-            if len(group_node.leaves) > 15:
-                print(f'Skipping {group_node.name} because it has more than 50 teams.')
+            if len(group_node.leaves) > 50:
+                print(f'Skipping {group_node.name} because it has more than 50 teams.\n')
                 continue
 
             # find if circle of suck exists for this subtree
@@ -344,37 +363,131 @@ def bot(SPORT, LEAGUE, SEASON_YEAR, SEASON_TYPE, GROUP_EXTENSION = ''):
         return
 
     season_response = fetch_season()
-    if season_active(season_response):
-        tree = fetch_tree()
+    if not season_active(season_response):
+        print(f'{SEASON_YEAR} {LEAGUE} is not currently active...')
+        # return
+    
+    tree = fetch_tree()
+
+    if not scrape_only:
         find_circles_of_suck(tree)
 
 if __name__ == "__main__":
     sports = {
         'football': [
             {'nfl': {
+                'season': '2025',
+                'season_type': 2
+            }},
+            {'nfl': {
+                'season': '2024',
+                'season_type': 2
+            }},
+            {'nfl': {
                 'season': '2023',
                 'season_type': 2
+            }},
+            {'nfl': {
+                'season': '2022',
+                'season_type': 2
+            }},
+            {'nfl': {
+                'season': '2021',
+                'season_type': 2
+            }},
+            {'nfl': {
+                'season': '2020',
+                'season_type': 2
+            }},
+            {'college-football': {
+                'season': '2025',
+                'season_type': 2,
+                'group': '/groups/90'
+            }},
+            {'college-football': {
+                'season': '2024',
+                'season_type': 2,
+                'group': '/groups/90'
             }},
             {'college-football': {
                 'season': '2023',
                 'season_type': 2,
                 'group': '/groups/90'
             }},
+            {'college-football': {
+                'season': '2022',
+                'season_type': 2,
+                'group': '/groups/90'
+            }},
+            {'college-football': {
+                'season': '2021',
+                'season_type': 2,
+                'group': '/groups/90'
+            }},
+            {'college-football': {
+                'season': '2020',
+                'season_type': 2,
+                'group': '/groups/90'
+            }},
         ],
         'basketball': [
+            {'mens-college-basketball': {
+                'season': '2026',
+                'season_type': 2
+            }},
+            {'mens-college-basketball': {
+                'season': '2025',
+                'season_type': 2
+            }},
+            {'mens-college-basketball': {
+                'season': '2024',
+                'season_type': 2
+            }},
             {'mens-college-basketball': {
                 'season': '2023',
                 'season_type': 2
             }},
+            {'mens-college-basketball': {
+                'season': '2022',
+                'season_type': 2
+            }},
+            {'mens-college-basketball': {
+                'season': '2021',
+                'season_type': 2
+            }},
             {'womens-college-basketball': {
-                'season': '2023',
+                'season': '2020',
                 'season_type': 2,
-                'group': '/groups/91'
+                'group': '/groups/50'
+            }},
+            {'nba': {
+                'season': '2026',
+                'season_type': 2
+            }},
+            {'nba': {
+                'season': '2025',
+                'season_type': 2
+            }},
+            {'nba': {
+                'season': '2024',
+                'season_type': 2
             }},
             {'nba': {
                 'season': '2023',
                 'season_type': 2
-            }}
+            }},
+            {'nba': {
+                'season': '2022',
+                'season_type': 2
+            }},
+            {'nba': {
+                'season': '2021',
+                'season_type': 2
+            }},
+            {'nba': {
+                'season': '2020',
+                'season_type': 2
+            }},
         ],
         'baseball': [
             {'mlb': {
@@ -394,5 +507,6 @@ if __name__ == "__main__":
                 season_type = details['season_type']
                 group = details.get('group', '')
 
-                bot(sport, league_name, season, season_type, group)
+                bot(sport, league_name, season, season_type, group, scrape_only=True)
+
 

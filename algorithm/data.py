@@ -1,4 +1,4 @@
-from anytree import NodeMixin
+from anytree import NodeMixin, RenderTree
 from datetime import datetime
 
 # ==================================================
@@ -94,11 +94,41 @@ class UpcomingGame(NodeMixin):
         return self.__str__()
     
 class Tree:
-    def __init__(self, root, teams, groups, game_ids):
+    def __init__(self, root, teams, groups, finished_game_ids):
         self.root = root
         self.teams = teams
         self.groups = groups
-        self.game_ids = game_ids
+        self.finished_game_ids = finished_game_ids
+    
+    def __str__(self):
+        lines = []
+
+        for prefix, _, node in RenderTree(self.root):
+            lines.append(f"{prefix}{node}")
+
+            if isinstance(node, GroupNode):
+                game_indent = " " * (len(prefix) + 4)
+
+                if node.games:
+                    lines.append(f"{game_indent}Completed games:")
+                    for game in sorted(
+                        node.games,
+                        key=lambda game: (game.date, game.id)
+                    ):
+                        lines.append(f"{game_indent}  - {game}")
+
+                if node.upcoming_games:
+                    lines.append(f"{game_indent}Upcoming games:")
+                    for game in sorted(
+                        node.upcoming_games,
+                        key=lambda game: (game.date, game.id)
+                    ):
+                        lines.append(f"{game_indent}  - {game}")
+
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return self.__str__()
 
 class CircleOfSuck:
     def __init__(self, group_name, cycle, edges, teams):
